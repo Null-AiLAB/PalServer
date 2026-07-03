@@ -4,6 +4,7 @@ import { registerIpc } from './ipc';
 import { serverManager } from './server-manager';
 import { playitManager } from './playit-manager';
 import { ensureDirs } from './paths';
+import { startScheduler } from './scheduler';
 
 // vite-plugin-electron compiles this file to CommonJS, so __dirname is available.
 const DIST_RENDERER = path.join(__dirname, '../../dist');
@@ -44,6 +45,7 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   ensureDirs();
   registerIpc(() => mainWindow);
+  startScheduler();
   createWindow();
 
   app.on('activate', () => {
