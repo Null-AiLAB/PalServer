@@ -109,6 +109,8 @@ export interface AppApi {
 
   getConfig(): Promise<PalOptions>;
   setConfig(patch: PalOptions): Promise<StartResult>;
+  getConfigRaw(): Promise<string>;
+  setConfigRaw(text: string): Promise<StartResult>;
 
   getSettings(): Promise<AppSettings>;
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
