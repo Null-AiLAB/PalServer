@@ -13,7 +13,7 @@ import type {
 
 const api = window.api;
 
-type Tab = 'console' | 'settings' | 'network' | 'backup' | 'players' | 'schedule';
+type Tab = 'console' | 'settings' | 'network' | 'backup' | 'players' | 'schedule' | 'ini';
 
 const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 const ACTION_OPTIONS: { value: ScheduleAction; label: string }[] = [
@@ -104,7 +104,10 @@ export default function App() {
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [command, setCommand] = useState('');
+  const [broadcast, setBroadcast] = useState('');
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [rawIni, setRawIni] = useState('');
+  const [rawMsg, setRawMsg] = useState('');
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -138,6 +141,10 @@ export default function App() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  useEffect(() => {
+    if (tab === 'ini' && !rawIni) void api.getConfigRaw().then(setRawIni);
+  }, [tab, rawIni]);
 
   const installed = status !== 'not-installed';
   const canStart = installed && (status === 'stopped' || status === 'error');
@@ -206,6 +213,19 @@ export default function App() {
   const removeScheduleEntry = (id: string) => {
     persistSchedule(schedule.filter((e) => e.id !== id));
   };
+
+  const loadRawIni = () =>
+    withBusy(async () => {
+      setRawIni(await api.getConfigRaw());
+      setRawMsg('現在の設定ファイルを読み込みました。');
+      setTimeout(() => setRawMsg(''), 4000);
+    });
+  const saveRawIni = () =>
+    withBusy(async () => {
+      const res = await api.setConfigRaw(rawIni);
+      setRawMsg(res.ok ? '保存しました。次回の起動から反映されます。' : `保存に失敗: ${res.error ?? ''}`);
+      setTimeout(() => setRawMsg(''), 5000);
+    });
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
@@ -276,6 +296,7 @@ export default function App() {
           ['backup', 'バックアップ'],
           ['schedule', 'スケジュール'],
           ['players', 'プレイヤー'],
+          ['ini', 'INI編集'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -293,6 +314,45 @@ export default function App() {
       <main className="flex-1 overflow-auto p-5">
         {tab === 'console' && (
           <div className="flex h-full flex-col">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <button
+                disabled={!canStop}
+                onClick={() => void api.sendCommand('Save')}
+                className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
+              >
+                セーブ
+              </button>
+              <button
+                disabled={!canStop}
+                onClick={() => void api.sendCommand('ShowPlayers')}
+                className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
+              >
+                プレイヤー確認
+              </button>
+              <form
+                className="flex flex-1 gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const msg = broadcast.trim().replace(/\s+/g, '_');
+                  if (!msg) return;
+                  void api.sendCommand(`Broadcast ${msg}`);
+                  setBroadcast('');
+                }}
+              >
+                <input
+                  value={broadcast}
+                  onChange={(e) => setBroadcast(e.target.value)}
+                  placeholder="全体通知（Palworldの仕様で空白は _ に置換されます）"
+                  className="flex-1 rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+                />
+                <button
+                  disabled={!canStop}
+                  className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
+                >
+                  通知
+                </button>
+              </form>
+            </div>
             <div className="flex-1 overflow-auto rounded bg-black/60 p-3 font-mono text-xs leading-relaxed">
               {logs.length === 0 && <div className="text-neutral-600">ログはまだありません。</div>}
               {logs.map((l) => (
@@ -627,6 +687,40 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {tab === 'ini' && (
+          <div className="flex h-full flex-col">
+            <div className="mb-3 flex items-center gap-3">
+              <button
+                disabled={busy}
+                onClick={loadRawIni}
+                className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700 disabled:opacity-50"
+              >
+                再読み込み
+              </button>
+              <button
+                disabled={busy}
+                onClick={saveRawIni}
+                className="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500 disabled:opacity-50"
+              >
+                保存
+              </button>
+              {rawMsg && <span className="text-sm text-emerald-400">{rawMsg}</span>}
+              <span className="ml-auto text-xs text-neutral-500">
+                PalWorldSettings.ini を直接編集（上級者向け）
+              </span>
+            </div>
+            <textarea
+              value={rawIni}
+              onChange={(e) => setRawIni(e.target.value)}
+              spellCheck={false}
+              className="min-h-[420px] flex-1 rounded bg-black/60 p-3 font-mono text-xs leading-relaxed text-neutral-200 outline-none ring-1 ring-neutral-800 focus:ring-sky-600"
+            />
+            <p className="mt-2 text-xs text-neutral-500">
+              ※ 書式を壊すとサーバーが起動しなくなることがあります。RCONで制御するには
+              OptionSettings 内の RCONEnabled=True / AdminPassword を維持してください。
+            </p>
           </div>
         )}
       </main>
