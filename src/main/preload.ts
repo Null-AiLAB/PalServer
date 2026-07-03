@@ -19,6 +19,8 @@ const api: AppApi = {
 
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (p) => ipcRenderer.invoke('config:set', p),
+  getConfigRaw: () => ipcRenderer.invoke('config:getRaw'),
+  setConfigRaw: (text) => ipcRenderer.invoke('config:setRaw', text),
 
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (p) => ipcRenderer.invoke('settings:set', p),
