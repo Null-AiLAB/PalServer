@@ -36,6 +36,9 @@ const api: AppApi = {
   setPlayitSecret: (s) => ipcRenderer.invoke('playit:setSecret', s),
   setPlayitAddress: (a) => ipcRenderer.invoke('playit:setAddress', a),
 
+  getSchedule: () => ipcRenderer.invoke('schedule:get'),
+  setSchedule: (entries) => ipcRenderer.invoke('schedule:set', entries),
+
   getLanAddress: () => ipcRenderer.invoke('system:lanAddress'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
 
