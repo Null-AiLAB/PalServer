@@ -6,7 +6,7 @@ import os from 'node:os';
 import type { AppSettings, PalOptions, PlayerInfo } from '../shared/types';
 import { serverManager } from './server-manager';
 import { playitManager } from './playit-manager';
-import { PalworldConfig } from './palworld-config';
+import { PalworldConfig, readRawConfig, writeRawConfig } from './palworld-config';
 import { readSettings, writeSettings } from './settings';
 import { isInstalled } from './paths';
 import { rconCommand } from './rcon';
@@ -78,6 +78,17 @@ export function registerIpc(getWindow: GetWindow): void {
   // app settings
   ipcMain.handle('settings:get', () => readSettings());
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => writeSettings(patch));
+
+  // raw ini editing
+  ipcMain.handle('config:getRaw', () => readRawConfig());
+  ipcMain.handle('config:setRaw', (_e, text: string) => {
+    try {
+      writeRawConfig(text);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  });
 
   // backups
   ipcMain.handle('backup:list', () => listBackups());
