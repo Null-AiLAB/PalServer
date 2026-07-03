@@ -54,6 +54,17 @@ export interface InstallState {
   installed: boolean;
 }
 
+// ---- scheduler ----
+export type ScheduleAction = 'start' | 'stop' | 'restart' | 'backup';
+
+export interface ScheduleEntry {
+  id: string;
+  enabled: boolean;
+  days: number[]; // 0=Sun .. 6=Sat
+  time: string; // "HH:MM" (local)
+  action: ScheduleAction;
+}
+
 // ---- playit.gg ----
 export type PlayitState =
   | 'disabled'
@@ -82,6 +93,7 @@ export interface AppSettings {
   adminPassword?: string;
   playitSecret?: string;
   playitTunnelAddress?: string;
+  schedule?: ScheduleEntry[];
 }
 
 // ---- preload API surface (window.api) ----
@@ -113,6 +125,9 @@ export interface AppApi {
   disablePlayit(): Promise<PlayitStatus>;
   setPlayitSecret(secret: string): Promise<PlayitStatus>;
   setPlayitAddress(address: string): Promise<PlayitStatus>;
+
+  getSchedule(): Promise<ScheduleEntry[]>;
+  setSchedule(entries: ScheduleEntry[]): Promise<ScheduleEntry[]>;
 
   getLanAddress(): Promise<string>;
   openExternal(url: string): Promise<void>;
