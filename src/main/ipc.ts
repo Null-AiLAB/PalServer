@@ -12,6 +12,8 @@ import { isInstalled } from './paths';
 import { rconCommand } from './rcon';
 import { sampleMetrics } from './metrics';
 import { listBackups, createBackup, restoreBackup, openBackupsFolder } from './backup-manager';
+import { getSchedule, setSchedule } from './scheduler';
+import type { ScheduleEntry } from '../shared/types';
 
 type GetWindow = () => BrowserWindow | null;
 
@@ -104,6 +106,10 @@ export function registerIpc(getWindow: GetWindow): void {
   ipcMain.handle('playit:disable', () => playitManager.disable());
   ipcMain.handle('playit:setSecret', (_e, secret: string) => playitManager.setSecret(secret));
   ipcMain.handle('playit:setAddress', (_e, address: string) => playitManager.setAddress(address));
+
+  // scheduler
+  ipcMain.handle('schedule:get', () => getSchedule());
+  ipcMain.handle('schedule:set', (_e, entries: ScheduleEntry[]) => setSchedule(entries));
 
   // misc
   ipcMain.handle('system:lanAddress', () => lanAddress());
