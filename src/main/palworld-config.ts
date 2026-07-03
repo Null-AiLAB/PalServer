@@ -173,3 +173,18 @@ export class PalworldConfig {
     fs.writeFileSync(active, this.serialize(), 'utf-8');
   }
 }
+
+/** Read the raw active config text (falls back to the default template). */
+export function readRawConfig(): string {
+  const active = configFile();
+  if (fs.existsSync(active)) return fs.readFileSync(active, 'utf-8');
+  if (fs.existsSync(defaultConfigFile())) return fs.readFileSync(defaultConfigFile(), 'utf-8');
+  return '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None,PublicPort=8211)\n';
+}
+
+/** Overwrite the active config with raw text. */
+export function writeRawConfig(text: string): void {
+  const active = configFile();
+  fs.mkdirSync(path.dirname(active), { recursive: true });
+  fs.writeFileSync(active, text, 'utf-8');
+}
