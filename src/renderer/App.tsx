@@ -5,13 +5,23 @@ import type {
   PalOptions,
   PlayerInfo,
   PlayitStatus,
+  ScheduleAction,
+  ScheduleEntry,
   ServerStatus,
   SystemMetrics,
 } from '../shared/types';
 
 const api = window.api;
 
-type Tab = 'console' | 'settings' | 'network' | 'backup' | 'players';
+type Tab = 'console' | 'settings' | 'network' | 'backup' | 'players' | 'schedule';
+
+const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+const ACTION_OPTIONS: { value: ScheduleAction; label: string }[] = [
+  { value: 'start', label: '起動' },
+  { value: 'stop', label: '停止' },
+  { value: 'restart', label: '再起動' },
+  { value: 'backup', label: 'バックアップ' },
+];
 
 const STATUS_LABEL: Record<ServerStatus, string> = {
   'not-installed': '未インストール',
@@ -94,6 +104,7 @@ export default function App() {
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [command, setCommand] = useState('');
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -108,6 +119,7 @@ export default function App() {
     void api.getStatus().then(setStatus);
     void api.getPlayitStatus().then(setPlayit);
     void api.getLanAddress().then(setLan);
+    void api.getSchedule().then(setSchedule);
     void refreshConfig();
     void refreshBackups();
 
@@ -167,6 +179,33 @@ export default function App() {
   }, [playit.tunnelAddress, draft]);
 
   const copy = (text: string) => void navigator.clipboard.writeText(text);
+
+  const persistSchedule = (next: ScheduleEntry[]) => {
+    setSchedule(next);
+    void api.setSchedule(next);
+  };
+  const addScheduleEntry = () => {
+    const entry: ScheduleEntry = {
+      id: `sch_${Date.now()}`,
+      enabled: true,
+      days: [0, 1, 2, 3, 4, 5, 6],
+      time: '05:00',
+      action: 'restart',
+    };
+    persistSchedule([...schedule, entry]);
+  };
+  const updateScheduleEntry = (id: string, patch: Partial<ScheduleEntry>) => {
+    persistSchedule(schedule.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  };
+  const toggleScheduleDay = (id: string, day: number) => {
+    const e = schedule.find((x) => x.id === id);
+    if (!e) return;
+    const days = e.days.includes(day) ? e.days.filter((d) => d !== day) : [...e.days, day].sort();
+    updateScheduleEntry(id, { days });
+  };
+  const removeScheduleEntry = (id: string) => {
+    persistSchedule(schedule.filter((e) => e.id !== id));
+  };
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
@@ -235,6 +274,7 @@ export default function App() {
           ['settings', '設定'],
           ['network', 'ネットワーク'],
           ['backup', 'バックアップ'],
+          ['schedule', 'スケジュール'],
           ['players', 'プレイヤー'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
@@ -472,6 +512,82 @@ export default function App() {
                   >
                     復元
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === 'schedule' && (
+          <div className="max-w-2xl">
+            <div className="mb-4 flex items-center gap-3">
+              <button
+                onClick={addScheduleEntry}
+                className="rounded bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500"
+              >
+                スケジュールを追加
+              </button>
+              <span className="text-xs text-neutral-500">
+                指定した曜日・時刻に自動で実行します（アプリ起動中のみ）。
+              </span>
+            </div>
+            <div className="space-y-3">
+              {schedule.length === 0 && (
+                <div className="rounded border border-neutral-800 p-4 text-sm text-neutral-500">
+                  まだスケジュールはありません。例: 毎日 5:00 に再起動。
+                </div>
+              )}
+              {schedule.map((e) => (
+                <div key={e.id} className="rounded border border-neutral-800 p-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={e.enabled}
+                      onChange={(ev) => updateScheduleEntry(e.id, { enabled: ev.target.checked })}
+                      className="h-5 w-5 accent-sky-600"
+                      title="有効/無効"
+                    />
+                    <input
+                      type="time"
+                      value={e.time}
+                      onChange={(ev) => updateScheduleEntry(e.id, { time: ev.target.value })}
+                      className="rounded bg-neutral-900 px-2 py-1 text-sm ring-1 ring-neutral-800"
+                    />
+                    <select
+                      value={e.action}
+                      onChange={(ev) =>
+                        updateScheduleEntry(e.id, { action: ev.target.value as ScheduleAction })
+                      }
+                      className="rounded bg-neutral-900 px-2 py-1 text-sm ring-1 ring-neutral-800"
+                    >
+                      {ACTION_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => removeScheduleEntry(e.id)}
+                      className="ml-auto rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-red-600"
+                    >
+                      削除
+                    </button>
+                  </div>
+                  <div className="mt-3 flex gap-1">
+                    {DAY_LABELS.map((d, idx) => (
+                      <button
+                        key={d}
+                        onClick={() => toggleScheduleDay(e.id, idx)}
+                        className={`h-8 w-8 rounded text-xs ${
+                          e.days.includes(idx)
+                            ? 'bg-sky-600 text-white'
+                            : 'bg-neutral-900 text-neutral-500 ring-1 ring-neutral-800'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
