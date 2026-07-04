@@ -16,6 +16,7 @@ const api: AppApi = {
 
   installOrUpdate: () => ipcRenderer.invoke('setup:installOrUpdate'),
   getInstallState: () => ipcRenderer.invoke('setup:getInstallState'),
+  uninstallServer: () => ipcRenderer.invoke('setup:uninstall'),
 
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (p) => ipcRenderer.invoke('config:set', p),
