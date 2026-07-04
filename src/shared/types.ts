@@ -135,6 +135,7 @@ export interface AppApi {
   setSchedule(entries: ScheduleEntry[]): Promise<ScheduleEntry[]>;
 
   openLogsFolder(): Promise<void>;
+  openServerFolder(): Promise<string>;
 
   getLanAddress(): Promise<string>;
   openExternal(url: string): Promise<void>;
