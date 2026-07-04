@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SetupWizard from './SetupWizard';
+import { CONFIG_META, GROUP_LABELS, GROUP_ORDER, metaFor, type Group } from './config-meta';
 import type {
   BackupInfo,
   LogLine,
@@ -46,50 +47,6 @@ const STATUS_COLOR: Record<ServerStatus, string> = {
   stopping: 'bg-amber-500',
   error: 'bg-red-500',
 };
-
-// Known enum-valued options -> selectable choices.
-const ENUM_OPTIONS: Record<string, string[]> = {
-  Difficulty: ['None', 'Casual', 'Normal', 'Hard'],
-  DeathPenalty: ['None', 'Item', 'ItemAndEquipment', 'All'],
-};
-
-// Friendly Japanese labels for common keys (fallback: raw key).
-const LABELS: Record<string, string> = {
-  ServerName: 'サーバー名',
-  ServerDescription: '説明',
-  ServerPassword: '参加パスワード',
-  AdminPassword: '管理者パスワード (RCON)',
-  PublicPort: '公開ポート',
-  PublicIP: '公開IP',
-  ServerPlayerMaxNum: '最大人数',
-  Difficulty: '難易度',
-  DeathPenalty: 'デスペナルティ',
-  bIsPvP: 'PvP を許可',
-  ExpRate: '経験値倍率',
-  PalCaptureRate: 'パル捕獲率',
-  DayTimeSpeedRate: '昼の速さ倍率',
-  NightTimeSpeedRate: '夜の速さ倍率',
-  RCONEnabled: 'RCON 有効',
-  RCONPort: 'RCON ポート',
-};
-
-const PRESETS: { name: string; label: string; values: PalOptions }[] = [
-  {
-    name: 'casual',
-    label: 'かんたん',
-    values: { Difficulty: 'Casual', DeathPenalty: 'None', ExpRate: 2, PalCaptureRate: 2, bIsPvP: false },
-  },
-  {
-    name: 'normal',
-    label: '標準',
-    values: { Difficulty: 'Normal', DeathPenalty: 'Item', ExpRate: 1, PalCaptureRate: 1, bIsPvP: false },
-  },
-  {
-    name: 'hardcore',
-    label: 'ハードコア',
-    values: { Difficulty: 'Hard', DeathPenalty: 'All', ExpRate: 1, PalCaptureRate: 1, bIsPvP: true },
-  },
-];
 
 const RCON_PORT_DEFAULT = 25575;
 
@@ -232,8 +189,6 @@ export default function App() {
       setTimeout(() => setSavedMsg(''), 4000);
     });
 
-  const applyPreset = (values: PalOptions) => setDraft((d) => ({ ...d, ...values }));
-
   const saveManager = () =>
     withBusy(async () => {
       await api.setSettings({ launchArgs, autoRestart, rconPort });
@@ -293,9 +248,125 @@ export default function App() {
     persistSchedule(schedule.filter((e) => e.id !== id));
   };
 
-  const configKeys = Object.keys(draft)
-    .filter((k) => k.toLowerCase().includes(filter.toLowerCase()))
-    .sort((a, b) => a.localeCompare(b));
+  // Group the config keys (filter matches key or Japanese label).
+  const groupedKeys = useMemo(() => {
+    const q = filter.toLowerCase();
+    const groups: Record<Group, string[]> = { server: [], balance: [], feature: [], perf: [], other: [] };
+    for (const key of Object.keys(draft)) {
+      const meta = metaFor(key, draft[key]);
+      if (q && !key.toLowerCase().includes(q) && !meta.label.toLowerCase().includes(q)) continue;
+      groups[meta.group].push(key);
+    }
+    for (const g of GROUP_ORDER) {
+      groups[g].sort((a, b) => (CONFIG_META[a]?.label ?? a).localeCompare(CONFIG_META[b]?.label ?? b, 'ja'));
+    }
+    return groups;
+  }, [draft, filter]);
+  const hasAnyKey = Object.keys(draft).length > 0;
+
+  const renderField = (key: string) => {
+    const v = draft[key];
+    const meta = metaFor(key, v);
+    if (meta.control === 'toggle') {
+      return (
+        <label key={key} className="flex items-center justify-between gap-3 rounded border border-neutral-800 px-3 py-2 text-sm">
+          <span className="min-w-0">
+            <span className="block truncate text-neutral-200" title={key}>{meta.label}</span>
+            {meta.help && <span className="block text-xs text-neutral-500">{meta.help}</span>}
+          </span>
+          <input
+            type="checkbox"
+            checked={Boolean(v)}
+            onChange={(e) => setField(key, e.target.checked)}
+            className="h-5 w-9 shrink-0 accent-sky-600"
+          />
+        </label>
+      );
+    }
+    if (meta.control === 'select') {
+      return (
+        <label key={key} className="flex flex-col gap-1 rounded border border-neutral-800 px-3 py-2 text-sm">
+          <span className="truncate text-neutral-200" title={key}>{meta.label}</span>
+          <select
+            value={String(v)}
+            onChange={(e) => setField(key, e.target.value)}
+            className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800"
+          >
+            {(meta.options ?? []).map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+          {meta.help && <span className="text-xs text-neutral-500">{meta.help}</span>}
+        </label>
+      );
+    }
+    if (meta.control === 'slider') {
+      const num = typeof v === 'number' ? v : Number(v) || 0;
+      const min = Math.min(meta.min ?? 0, num);
+      const max = Math.max(meta.max ?? 5, num);
+      return (
+        <div key={key} className="flex flex-col gap-1 rounded border border-neutral-800 px-3 py-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="truncate text-neutral-200" title={key}>{meta.label}</span>
+            <span className="ml-2 shrink-0 font-mono text-xs text-sky-300">{num}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={meta.step ?? 0.1}
+              value={num}
+              onChange={(e) => setField(key, Number(e.target.value))}
+              className="flex-1 accent-sky-600"
+            />
+            <input
+              type="number"
+              step={meta.step ?? 0.1}
+              value={num}
+              onChange={(e) => setField(key, Number(e.target.value))}
+              className="w-20 rounded bg-neutral-900 px-2 py-1 text-xs ring-1 ring-neutral-800"
+            />
+          </div>
+          {meta.help && <span className="text-xs text-neutral-500">{meta.help}</span>}
+        </div>
+      );
+    }
+    if (meta.control === 'number') {
+      return (
+        <label key={key} className="flex flex-col gap-1 rounded border border-neutral-800 px-3 py-2 text-sm">
+          <span className="truncate text-neutral-200" title={key}>{meta.label}</span>
+          <input
+            type="number"
+            step="any"
+            value={typeof v === 'number' ? v : Number(v) || 0}
+            onChange={(e) => setField(key, Number(e.target.value))}
+            className="w-40 rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
+          />
+          {meta.help && <span className="text-xs text-neutral-500">{meta.help}</span>}
+        </label>
+      );
+    }
+    // text
+    return (
+      <label key={key} className="flex flex-col gap-1 rounded border border-neutral-800 px-3 py-2 text-sm">
+        <span className="truncate text-neutral-200" title={key}>{meta.label}</span>
+        <input
+          type={meta.password ? 'password' : 'text'}
+          value={String(v ?? '')}
+          onChange={(e) => setField(key, e.target.value)}
+          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
+        />
+        {(meta.help || meta.example) && (
+          <span className="text-xs text-neutral-500">
+            {meta.help}
+            {meta.help && meta.example ? ' ' : ''}
+            {meta.example && <span className="font-mono text-neutral-400">{meta.example}</span>}
+          </span>
+        )}
+      </label>
+    );
+  };
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
@@ -514,82 +585,41 @@ export default function App() {
         )}
 
         {tab === 'server' && (
-          <div className="max-w-3xl">
+          <div className="max-w-4xl">
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-neutral-500">プリセット:</span>
-              {PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  onClick={() => applyPreset(p.values)}
-                  className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
-                >
-                  {p.label}
-                </button>
-              ))}
+              <span className="text-xs text-neutral-500">
+                公式ガイド準拠の項目です。倍率はスライダー、オン/オフはトグルで調整できます。
+              </span>
               <input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                placeholder="項目を検索..."
-                className="ml-auto rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+                placeholder="項目を検索（日本語・英名どちらでも）..."
+                className="ml-auto w-64 rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
               />
             </div>
 
-            {configKeys.length === 0 ? (
+            {!hasAnyKey ? (
               <p className="text-sm text-neutral-500">
                 設定項目がありません。先にサーバーをインストールしてください。
               </p>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {configKeys.map((key) => {
-                  const v = draft[key];
-                  const label = LABELS[key] ?? key;
-                  return (
-                    <label key={key} className="flex flex-col gap-1 text-sm">
-                      <span className="truncate text-neutral-400" title={key}>
-                        {label}
-                      </span>
-                      {typeof v === 'boolean' ? (
-                        <input
-                          type="checkbox"
-                          checked={v}
-                          onChange={(e) => setField(key, e.target.checked)}
-                          className="h-5 w-5 accent-sky-600"
-                        />
-                      ) : ENUM_OPTIONS[key] ? (
-                        <select
-                          value={String(v)}
-                          onChange={(e) => setField(key, e.target.value)}
-                          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800"
-                        >
-                          {ENUM_OPTIONS[key].map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      ) : typeof v === 'number' ? (
-                        <input
-                          type="number"
-                          step="any"
-                          value={v}
-                          onChange={(e) => setField(key, Number(e.target.value))}
-                          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
-                        />
-                      ) : (
-                        <input
-                          type={/password/i.test(key) ? 'password' : 'text'}
-                          value={String(v)}
-                          onChange={(e) => setField(key, e.target.value)}
-                          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
-                        />
-                      )}
-                    </label>
-                  );
-                })}
+              <div className="space-y-6">
+                {GROUP_ORDER.map((g) =>
+                  groupedKeys[g].length === 0 ? null : (
+                    <section key={g}>
+                      <h3 className="mb-2 border-b border-neutral-800 pb-1 text-sm font-medium text-neutral-300">
+                        {GROUP_LABELS[g]}
+                      </h3>
+                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                        {groupedKeys[g].map((key) => renderField(key))}
+                      </div>
+                    </section>
+                  ),
+                )}
               </div>
             )}
 
-            <div className="mt-5 flex items-center gap-3">
+            <div className="mt-6 flex items-center gap-3">
               <button
                 disabled={busy}
                 onClick={saveServerConfig}
