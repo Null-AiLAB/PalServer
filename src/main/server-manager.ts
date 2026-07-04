@@ -337,6 +337,23 @@ class ServerManager extends EventEmitter {
       this.child.kill();
     }
   }
+
+  /** Delete the installed Palworld server files (frees disk space). */
+  async uninstall(): Promise<StartResult> {
+    if (this.child) {
+      return { ok: false, error: '起動中はアンインストールできません。先に停止してください。' };
+    }
+    try {
+      fs.rmSync(serverDir(), { recursive: true, force: true });
+      this.startedAt = null;
+      this.setStatus('not-installed');
+      this.log('サーバーをアンインストールしました。');
+      return { ok: true };
+    } catch (e) {
+      this.log(`アンインストールに失敗: ${(e as Error).message}`);
+      return { ok: false, error: (e as Error).message };
+    }
+  }
 }
 
 export const serverManager = new ServerManager();
