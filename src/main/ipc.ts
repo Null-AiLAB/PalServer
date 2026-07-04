@@ -3,12 +3,13 @@
 
 import { ipcMain, shell, type BrowserWindow } from 'electron';
 import os from 'node:os';
+import fs from 'node:fs';
 import type { AppSettings, PalOptions, PlayerInfo } from '../shared/types';
 import { serverManager } from './server-manager';
 import { playitManager } from './playit-manager';
 import { PalworldConfig, readRawConfig, writeRawConfig } from './palworld-config';
 import { readSettings, writeSettings } from './settings';
-import { isInstalled } from './paths';
+import { isInstalled, serverDir } from './paths';
 import { rconCommand } from './rcon';
 import { sampleMetrics } from './metrics';
 import { listBackups, createBackup, restoreBackup, openBackupsFolder } from './backup-manager';
@@ -136,6 +137,13 @@ export function registerIpc(getWindow: GetWindow): void {
 
   // logs
   ipcMain.handle('log:openFolder', () => openLogsFolder());
+
+  // open the server files folder
+  ipcMain.handle('system:openServerFolder', () => {
+    const dir = serverDir();
+    fs.mkdirSync(dir, { recursive: true });
+    return shell.openPath(dir);
+  });
 
   // misc
   ipcMain.handle('system:lanAddress', () => lanAddress());
