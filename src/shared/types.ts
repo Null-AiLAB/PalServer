@@ -94,6 +94,7 @@ export interface AppSettings {
   playitSecret?: string;
   playitTunnelAddress?: string;
   schedule?: ScheduleEntry[];
+  setupComplete?: boolean;
 }
 
 // ---- preload API surface (window.api) ----
