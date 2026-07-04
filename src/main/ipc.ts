@@ -13,6 +13,7 @@ import { rconCommand } from './rcon';
 import { sampleMetrics } from './metrics';
 import { listBackups, createBackup, restoreBackup, openBackupsFolder } from './backup-manager';
 import { getSchedule, setSchedule } from './scheduler';
+import { appendLog, openLogsFolder } from './logger';
 import type { ScheduleEntry } from '../shared/types';
 
 type GetWindow = () => BrowserWindow | null;
@@ -43,7 +44,10 @@ export function registerIpc(getWindow: GetWindow): void {
     getWindow()?.webContents.send(channel, payload);
   };
 
-  serverManager.on('log', (l) => send('server:log', l));
+  serverManager.on('log', (l) => {
+    send('server:log', l);
+    appendLog(l);
+  });
   serverManager.on('status', (s) => send('server:status', s));
   playitManager.on('status', (s) => send('playit:status', s));
 
@@ -121,6 +125,9 @@ export function registerIpc(getWindow: GetWindow): void {
   // scheduler
   ipcMain.handle('schedule:get', () => getSchedule());
   ipcMain.handle('schedule:set', (_e, entries: ScheduleEntry[]) => setSchedule(entries));
+
+  // logs
+  ipcMain.handle('log:openFolder', () => openLogsFolder());
 
   // misc
   ipcMain.handle('system:lanAddress', () => lanAddress());
