@@ -93,6 +93,7 @@ export interface AppSettings {
   adminPassword?: string;
   playitSecret?: string;
   playitTunnelAddress?: string;
+  playitAutoStart?: boolean;
   schedule?: ScheduleEntry[];
   setupComplete?: boolean;
 }
@@ -107,6 +108,7 @@ export interface AppApi {
 
   installOrUpdate(): Promise<StartResult>;
   getInstallState(): Promise<InstallState>;
+  uninstallServer(): Promise<StartResult>;
 
   getConfig(): Promise<PalOptions>;
   setConfig(patch: PalOptions): Promise<StartResult>;
