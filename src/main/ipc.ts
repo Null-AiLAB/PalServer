@@ -48,7 +48,14 @@ export function registerIpc(getWindow: GetWindow): void {
     send('server:log', l);
     appendLog(l);
   });
-  serverManager.on('status', (s) => send('server:status', s));
+  serverManager.on('status', (s) => {
+    send('server:status', s);
+    const st = readSettings();
+    if (st.playitAutoStart && st.playitSecret) {
+      if (s === 'starting') void playitManager.enable();
+      else if (s === 'stopped' || s === 'not-installed' || s === 'error') playitManager.disable();
+    }
+  });
   playitManager.on('status', (s) => send('playit:status', s));
 
   setInterval(() => {
@@ -65,6 +72,7 @@ export function registerIpc(getWindow: GetWindow): void {
   // install / update
   ipcMain.handle('setup:installOrUpdate', () => serverManager.installOrUpdate());
   ipcMain.handle('setup:getInstallState', () => ({ installed: isInstalled() }));
+  ipcMain.handle('setup:uninstall', () => serverManager.uninstall());
 
   // config (PalWorldSettings.ini)
   ipcMain.handle('config:get', () => PalworldConfig.load().toObject());
