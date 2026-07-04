@@ -1,8 +1,10 @@
 // Japanese labels + UI control metadata for PalWorldSettings options.
 // Labels/behaviour are based on the official server guide (v0.7.2, game 0.7.3):
 // https://docs.palworldgame.com/ja/settings-and-operation/configuration/
-// Slider ranges mirror the in-game world settings where practical; values
-// outside a slider's range are still accepted (the slider auto-expands).
+// NOTE: strict min/max are NOT officially published — the Palworld Wiki lists
+// every rate's accepted range as "TBD". Slider ranges below therefore mirror the
+// in-game world-settings sliders as a practical guide; the .ini accepts values
+// outside them, and the UI's number box + auto-expanding slider allow that.
 
 import type { PalOptionValue } from '../shared/types';
 
@@ -58,7 +60,7 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     password: true,
     help: 'アプリからの停止・コマンド送信に必要です。例: Abc-311088',
   },
-  ServerPlayerMaxNum: { label: '最大参加人数', group: 'server', control: 'slider', min: 1, max: 32, step: 1 },
+  ServerPlayerMaxNum: { label: '最大参加人数', group: 'server', control: 'slider', min: 1, max: 32, step: 1, help: 'ハード上限は 32。近づくほど負荷が増えます。' },
   PublicPort: { label: '公開ポート', group: 'server', control: 'number', help: '通常は 8211。' },
   PublicIP: {
     label: '公開IP',
@@ -117,7 +119,7 @@ export const CONFIG_META: Record<string, FieldMeta> = {
   BuildObjectDeteriorationDamageRate: { ...rate(0, 3, '0で劣化なし。'), label: '建築物の劣化速度' },
   CollectionDropRate: { ...rate(0.5, 3, '採集で入手できる量。'), label: '採集アイテム入手量' },
   CollectionObjectHpRate: { ...rate(0.5, 3, '低いほど少ない手数で採集できます。'), label: '採集オブジェクトHP' },
-  CollectionObjectRespawnSpeedRate: { ...rate(0.5, 3, '木や鉱石の再出現の速さ。'), label: '採集オブジェクト再出現' },
+  CollectionObjectRespawnSpeedRate: { ...rate(0.5, 3, '※逆方向：低いほど早く再出現します。'), label: '採集オブジェクト再出現' },
   EnemyDropItemRate: { ...rate(0.5, 3), label: '敵ドロップ量倍率' },
   EquipmentDurabilityDamageRate: { ...rate(0, 3, '0で耐久が減りません。'), label: '装備の耐久消耗' },
   ItemWeightRate: { ...rate(0, 5, '低いほど重量が軽くなります。'), label: 'アイテム重量倍率' },
@@ -133,8 +135,8 @@ export const CONFIG_META: Record<string, FieldMeta> = {
   bPalLost: { label: '死亡時にパルをロスト', group: 'balance', control: 'toggle' },
   BlockRespawnTime: { label: 'リスポーン待機時間（秒）', group: 'balance', control: 'number' },
   RespawnPenaltyDurationThreshold: { label: '連続死亡ペナルティ判定（秒）', group: 'balance', control: 'number' },
-  PalEggDefaultHatchingTime: { label: 'キョダイタマゴ孵化時間（時間）', group: 'balance', control: 'number' },
-  SupplyDropSpan: { label: '補給物資の投下間隔（分）', group: 'balance', control: 'number' },
+  PalEggDefaultHatchingTime: { label: 'キョダイタマゴ孵化時間（時間）', group: 'balance', control: 'number', help: '実時間。既定72は長いので下げる人が多い。0で即時。' },
+  SupplyDropSpan: { label: '補給物資の投下間隔（分）', group: 'balance', control: 'number', help: '専用サーバーでは無視される（180のまま）との報告が多い項目です。' },
   GuildPlayerMaxNum: { label: 'ギルド最大人数', group: 'balance', control: 'slider', min: 1, max: 100, step: 1 },
   GuildRejoinCooldownMinutes: { label: 'ギルド再加入クールタイム（分）', group: 'balance', control: 'number' },
   DenyTechnologyList: {
@@ -159,9 +161,11 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     group: 'feature',
     control: 'select',
     options: ['None', 'Casual', 'Normal', 'Hard'],
-    help: 'None は「カスタム（各倍率をそのまま使用）」の扱いです。',
+    help: '専用サーバーでは現状ほぼ機能しません（None のままで各倍率がそのまま効きます）。',
   },
-  bIsPvP: { label: 'PvP を許可', group: 'feature', control: 'toggle' },
+  bIsPvP: { label: 'PvP を許可', group: 'feature', control: 'toggle', help: 'PvPには本項目＋プレイヤー間ダメージ＋他ギルド攻撃の3つを全てオンにする必要があります。' },
+  bEnableDefenseOtherGuildPlayer: { label: '拠点で他ギルドを攻撃（PvP必須）', group: 'feature', control: 'toggle', help: 'PvP有効化に必要な3つ目のトグル。' },
+  EnablePredatorBossPal: { label: '徘徊ボス（プレデター）を有効化', group: 'feature', control: 'toggle' },
   bEnableInvaderEnemy: { label: '襲撃（侵入者）を有効化', group: 'feature', control: 'toggle' },
   bEnableFastTravel: { label: 'ファストトラベルを有効化', group: 'feature', control: 'toggle' },
   bEnableFastTravelOnlyBaseCamp: { label: 'ファストトラベルを拠点間のみに制限', group: 'feature', control: 'toggle' },
@@ -204,7 +208,7 @@ export const CONFIG_META: Record<string, FieldMeta> = {
 
   // ---- パフォーマンス ----
   BaseCampMaxNumInGuild: { label: 'ギルドあたり最大拠点数', group: 'perf', control: 'slider', min: 1, max: 10, step: 1, help: '大きいほど負荷増。' },
-  BaseCampWorkerMaxNum: { label: '拠点あたり最大パル数', group: 'perf', control: 'slider', min: 1, max: 50, step: 1, help: '大きいほど負荷増。' },
+  BaseCampWorkerMaxNum: { label: '拠点あたり最大パル数', group: 'perf', control: 'slider', min: 1, max: 50, step: 1, help: 'ハード上限50。ただし15より上が反映されない不具合報告あり。' },
   MaxBuildingLimitNum: { label: 'プレイヤーごとの建築数上限', group: 'perf', control: 'number', help: '0 で無制限。' },
   ItemContainerForceMarkDirtyInterval: { label: 'コンテナ同期間隔（秒）', group: 'perf', control: 'number' },
   ServerReplicatePawnCullDistance: {
@@ -215,6 +219,19 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     max: 15000,
     step: 500,
   },
+
+  // 公式表・実機(v0.7.3)で確認できた追加キー
+  WorkSpeedRate: { ...rate(0.1, 5, '拠点パルの作業速度。'), label: '作業速度倍率' },
+  AutoSaveSpan: { label: 'オートセーブ間隔（秒）', group: 'server', control: 'number', help: '既定30。大規模拠点では60〜120にするとカクつき軽減。' },
+  DropItemMaxNum: { label: '地面アイテムの総数上限', group: 'perf', control: 'number', help: 'ラグ対策に下げる。既定3000。' },
+  DropItemMaxNum_UNKO: { label: '落とし物(UNKO)の総数上限', group: 'perf', control: 'number' },
+  DropItemAliveMaxHours: { label: '地面アイテムの保持時間（時間）', group: 'balance', control: 'number' },
+  BaseCampMaxNum: { label: 'ワールド全体の拠点上限', group: 'perf', control: 'number', help: '全ギルド合計。既定128。' },
+  CoopPlayerMaxNum: { label: 'co-op最大人数', group: 'other', control: 'number', help: '招待プレイ用。専用サーバーでは無視されます。' },
+  bUseAuth: { label: 'Steam認証を要求', group: 'server', control: 'toggle', help: 'LANテスト以外はオンのままに。' },
+  BanListURL: { label: 'BANリストURL', group: 'other', control: 'text', help: '既定は公式のグローバルBANリスト。' },
+  Region: { label: 'リージョン表記', group: 'server', control: 'text', help: '一覧に表示される地域ラベル（表示のみ）。' },
+  bIsMultiplay: { label: 'co-opフラグ（無視）', group: 'other', control: 'toggle', help: '専用サーバーでは無視されます。' },
 };
 
 /** Resolve metadata for a key, falling back to a sensible control by value type. */
