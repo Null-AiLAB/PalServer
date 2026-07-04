@@ -4,6 +4,7 @@ import type {
   BackupInfo,
   LogLine,
   PalOptions,
+  PalOptionValue,
   PlayerInfo,
   PlayitStatus,
   ScheduleAction,
@@ -14,7 +15,7 @@ import type {
 
 const api = window.api;
 
-type Tab = 'console' | 'settings' | 'network' | 'backup' | 'players' | 'schedule' | 'ini';
+type Tab = 'console' | 'server' | 'manager' | 'network' | 'backup' | 'schedule';
 
 const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 const ACTION_OPTIONS: { value: ScheduleAction; label: string }[] = [
@@ -46,35 +47,31 @@ const STATUS_COLOR: Record<ServerStatus, string> = {
   error: 'bg-red-500',
 };
 
-interface FieldDef {
-  key: string;
-  label: string;
-  type: 'text' | 'password' | 'number' | 'bool' | 'enum';
-  options?: string[];
-}
+// Known enum-valued options -> selectable choices.
+const ENUM_OPTIONS: Record<string, string[]> = {
+  Difficulty: ['None', 'Casual', 'Normal', 'Hard'],
+  DeathPenalty: ['None', 'Item', 'ItemAndEquipment', 'All'],
+};
 
-const CONFIG_FIELDS: FieldDef[] = [
-  { key: 'ServerName', label: 'サーバー名', type: 'text' },
-  { key: 'ServerDescription', label: '説明', type: 'text' },
-  { key: 'ServerPassword', label: '参加パスワード', type: 'password' },
-  { key: 'AdminPassword', label: '管理者パスワード (RCON)', type: 'password' },
-  { key: 'PublicPort', label: '公開ポート', type: 'number' },
-  { key: 'ServerPlayerMaxNum', label: '最大人数', type: 'number' },
-  { key: 'Difficulty', label: '難易度', type: 'enum', options: ['None', 'Casual', 'Normal', 'Hard'] },
-  {
-    key: 'DeathPenalty',
-    label: 'デスペナルティ',
-    type: 'enum',
-    options: ['None', 'Item', 'ItemAndEquipment', 'All'],
-  },
-  { key: 'bIsPvP', label: 'PvP を許可', type: 'bool' },
-  { key: 'ExpRate', label: '経験値倍率', type: 'number' },
-  { key: 'PalCaptureRate', label: 'パル捕獲率', type: 'number' },
-  { key: 'DayTimeSpeedRate', label: '昼の速さ倍率', type: 'number' },
-  { key: 'NightTimeSpeedRate', label: '夜の速さ倍率', type: 'number' },
-];
-
-const RCON_PORT_DEFAULT = 25575;
+// Friendly Japanese labels for common keys (fallback: raw key).
+const LABELS: Record<string, string> = {
+  ServerName: 'サーバー名',
+  ServerDescription: '説明',
+  ServerPassword: '参加パスワード',
+  AdminPassword: '管理者パスワード (RCON)',
+  PublicPort: '公開ポート',
+  PublicIP: '公開IP',
+  ServerPlayerMaxNum: '最大人数',
+  Difficulty: '難易度',
+  DeathPenalty: 'デスペナルティ',
+  bIsPvP: 'PvP を許可',
+  ExpRate: '経験値倍率',
+  PalCaptureRate: 'パル捕獲率',
+  DayTimeSpeedRate: '昼の速さ倍率',
+  NightTimeSpeedRate: '夜の速さ倍率',
+  RCONEnabled: 'RCON 有効',
+  RCONPort: 'RCON ポート',
+};
 
 const PRESETS: { name: string; label: string; values: PalOptions }[] = [
   {
@@ -93,6 +90,8 @@ const PRESETS: { name: string; label: string; values: PalOptions }[] = [
     values: { Difficulty: 'Hard', DeathPenalty: 'All', ExpRate: 1, PalCaptureRate: 1, bIsPvP: true },
   },
 ];
+
+const RCON_PORT_DEFAULT = 25575;
 
 function bytes(n: number): string {
   if (n <= 0) return '0 MB';
@@ -114,29 +113,40 @@ export default function App() {
   const [busy, setBusy] = useState(false);
 
   const [draft, setDraft] = useState<PalOptions>({});
+  const originalRef = useRef<PalOptions>({});
   const [savedMsg, setSavedMsg] = useState('');
+  const [filter, setFilter] = useState('');
 
   const [playit, setPlayit] = useState<PlayitStatus>({ state: 'disabled', installed: false, hasSecret: false });
   const [secret, setSecret] = useState('');
   const [lan, setLan] = useState('127.0.0.1');
+  const [playitAuto, setPlayitAuto] = useState(false);
 
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [command, setCommand] = useState('');
   const [broadcast, setBroadcast] = useState('');
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
-  const [rawIni, setRawIni] = useState('');
-  const [rawMsg, setRawMsg] = useState('');
   const [showWizard, setShowWizard] = useState(false);
-  const [playitAuto, setPlayitAuto] = useState(false);
+
+  // manager (app) settings
+  const [launchArgs, setLaunchArgs] = useState('');
+  const [autoRestart, setAutoRestart] = useState(false);
+  const [rconPort, setRconPort] = useState(RCON_PORT_DEFAULT);
+  const [managerMsg, setManagerMsg] = useState('');
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const refreshConfig = useCallback(async () => {
-    setDraft(await api.getConfig());
+    const c = await api.getConfig();
+    originalRef.current = c;
+    setDraft(c);
   }, []);
   const refreshBackups = useCallback(async () => {
     setBackups(await api.listBackups());
+  }, []);
+  const refreshPlayers = useCallback(() => {
+    void api.showPlayers().then(setPlayers);
   }, []);
 
   useEffect(() => {
@@ -147,6 +157,9 @@ export default function App() {
     void api.getSettings().then((s) => {
       if (!s.setupComplete) setShowWizard(true);
       setPlayitAuto(!!s.playitAutoStart);
+      setLaunchArgs(s.launchArgs ?? '');
+      setAutoRestart(!!s.autoRestart);
+      setRconPort(s.rconPort ?? RCON_PORT_DEFAULT);
     });
     void refreshConfig();
     void refreshBackups();
@@ -167,9 +180,21 @@ export default function App() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
+  // Poll the joined players while the server is running.
   useEffect(() => {
-    if (tab === 'ini' && !rawIni) void api.getConfigRaw().then(setRawIni);
-  }, [tab, rawIni]);
+    if (status !== 'running') {
+      setPlayers([]);
+      return;
+    }
+    let alive = true;
+    const load = () => void api.showPlayers().then((p) => alive && setPlayers(p));
+    load();
+    const id = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [status]);
 
   const installed = status !== 'not-installed';
   const canStart = installed && (status === 'stopped' || status === 'error');
@@ -184,23 +209,52 @@ export default function App() {
     }
   };
 
-  const saveConfig = () =>
+  const setField = (key: string, value: PalOptionValue) => setDraft((d) => ({ ...d, [key]: value }));
+
+  const saveServerConfig = () =>
     withBusy(async () => {
       const patch: PalOptions = {};
-      for (const f of CONFIG_FIELDS) {
-        if (draft[f.key] !== undefined) patch[f.key] = draft[f.key];
+      for (const [k, v] of Object.entries(draft)) {
+        if (originalRef.current[k] !== v) patch[k] = v;
       }
-      // Keep RCON in sync so the app can control the server.
       patch['RCONEnabled'] = true;
-      patch['RCONPort'] = RCON_PORT_DEFAULT;
+      patch['RCONPort'] = rconPort;
       await api.setConfig(patch);
-      await api.setSettings({
-        rconEnabled: true,
-        rconPort: RCON_PORT_DEFAULT,
-        adminPassword: String(draft['AdminPassword'] ?? ''),
-      });
+      if ('AdminPassword' in draft) {
+        await api.setSettings({
+          rconEnabled: true,
+          rconPort,
+          adminPassword: String(draft['AdminPassword'] ?? ''),
+        });
+      }
+      originalRef.current = { ...draft, RCONEnabled: true, RCONPort: rconPort };
       setSavedMsg('保存しました。次回の起動から反映されます。');
       setTimeout(() => setSavedMsg(''), 4000);
+    });
+
+  const applyPreset = (values: PalOptions) => setDraft((d) => ({ ...d, ...values }));
+
+  const saveManager = () =>
+    withBusy(async () => {
+      await api.setSettings({ launchArgs, autoRestart, rconPort });
+      setManagerMsg('保存しました。');
+      setTimeout(() => setManagerMsg(''), 3000);
+    });
+
+  const togglePlayitAuto = (v: boolean) => {
+    setPlayitAuto(v);
+    void api.setSettings({ playitAutoStart: v });
+  };
+
+  const uninstallServer = () =>
+    withBusy(async () => {
+      if (!window.confirm('サーバーのインストール済みファイルを削除します。セーブデータも消えます。よろしいですか？')) {
+        return;
+      }
+      const res = await api.uninstallServer();
+      if (!res.ok) window.alert(`アンインストールに失敗しました: ${res.error ?? ''}`);
+      await api.getStatus().then(setStatus);
+      await refreshBackups();
     });
 
   const inviteText = useMemo(() => {
@@ -239,36 +293,9 @@ export default function App() {
     persistSchedule(schedule.filter((e) => e.id !== id));
   };
 
-  const loadRawIni = () =>
-    withBusy(async () => {
-      setRawIni(await api.getConfigRaw());
-      setRawMsg('現在の設定ファイルを読み込みました。');
-      setTimeout(() => setRawMsg(''), 4000);
-    });
-  const saveRawIni = () =>
-    withBusy(async () => {
-      const res = await api.setConfigRaw(rawIni);
-      setRawMsg(res.ok ? '保存しました。次回の起動から反映されます。' : `保存に失敗: ${res.error ?? ''}`);
-      setTimeout(() => setRawMsg(''), 5000);
-    });
-
-  const applyPreset = (values: PalOptions) => setDraft((d) => ({ ...d, ...values }));
-
-  const togglePlayitAuto = (v: boolean) => {
-    setPlayitAuto(v);
-    void api.setSettings({ playitAutoStart: v });
-  };
-
-  const uninstallServer = () =>
-    withBusy(async () => {
-      if (!window.confirm('サーバーのインストール済みファイルを削除します。セーブデータも消えます。よろしいですか？')) {
-        return;
-      }
-      const res = await api.uninstallServer();
-      if (!res.ok) window.alert(`アンインストールに失敗しました: ${res.error ?? ''}`);
-      await api.getStatus().then(setStatus);
-      await refreshBackups();
-    });
+  const configKeys = Object.keys(draft)
+    .filter((k) => k.toLowerCase().includes(filter.toLowerCase()))
+    .sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
@@ -343,12 +370,11 @@ export default function App() {
       <nav className="flex gap-1 border-b border-neutral-800 px-4">
         {([
           ['console', 'コンソール'],
-          ['settings', '設定'],
+          ['server', 'サーバー設定'],
+          ['manager', 'マネージャー設定'],
           ['network', 'ネットワーク'],
           ['backup', 'バックアップ'],
           ['schedule', 'スケジュール'],
-          ['players', 'プレイヤー'],
-          ['ini', 'INI編集'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -365,96 +391,130 @@ export default function App() {
       {/* Content */}
       <main className="flex-1 overflow-auto p-5">
         {tab === 'console' && (
-          <div className="flex h-full flex-col">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <button
-                disabled={!canStop}
-                onClick={() => void api.sendCommand('Save')}
-                className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
-              >
-                セーブ
-              </button>
-              <button
-                disabled={!canStop}
-                onClick={() => void api.sendCommand('ShowPlayers')}
-                className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
-              >
-                プレイヤー確認
-              </button>
-              <button
-                onClick={() => void api.openLogsFolder()}
-                className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
-              >
-                ログフォルダ
-              </button>
+          <div className="flex h-full gap-4">
+            {/* Player list (left) */}
+            <aside className="flex w-64 shrink-0 flex-col rounded border border-neutral-800">
+              <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+                <span className="text-sm font-medium">参加プレイヤー ({players.length})</span>
+                <button
+                  onClick={refreshPlayers}
+                  disabled={!canStop}
+                  className="rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
+                >
+                  更新
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-2 text-sm">
+                {players.length === 0 ? (
+                  <div className="p-2 text-xs text-neutral-600">
+                    {status === 'running' ? 'プレイヤーはいません。' : '稼働中に表示されます。'}
+                  </div>
+                ) : (
+                  players.map((p, i) => (
+                    <div key={`${p.steamId ?? p.name}-${i}`} className="group rounded px-2 py-1.5 hover:bg-neutral-900">
+                      <div className="truncate text-neutral-100">{p.name}</div>
+                      <div className="flex items-center gap-1">
+                        <span className="truncate font-mono text-xs text-neutral-500">{p.steamId ?? '-'}</span>
+                        {p.steamId && (
+                          <button
+                            onClick={() => void api.sendCommand(`KickPlayer ${p.steamId}`)}
+                            className="ml-auto hidden rounded bg-neutral-800 px-2 text-xs hover:bg-red-600 group-hover:block"
+                          >
+                            Kick
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </aside>
+
+            {/* Console (right) */}
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button
+                  disabled={!canStop}
+                  onClick={() => void api.sendCommand('Save')}
+                  className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
+                >
+                  セーブ
+                </button>
+                <button
+                  onClick={() => void api.openLogsFolder()}
+                  className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
+                >
+                  ログフォルダ
+                </button>
+                <form
+                  className="flex flex-1 gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const msg = broadcast.trim().replace(/\s+/g, '_');
+                    if (!msg) return;
+                    void api.sendCommand(`Broadcast ${msg}`);
+                    setBroadcast('');
+                  }}
+                >
+                  <input
+                    value={broadcast}
+                    onChange={(e) => setBroadcast(e.target.value)}
+                    placeholder="全体通知（空白は _ に置換されます）"
+                    className="flex-1 rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+                  />
+                  <button
+                    disabled={!canStop}
+                    className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
+                  >
+                    通知
+                  </button>
+                </form>
+              </div>
+              <div className="flex-1 overflow-auto rounded bg-black/60 p-3 font-mono text-xs leading-relaxed">
+                {logs.length === 0 && <div className="text-neutral-600">ログはまだありません。</div>}
+                {logs.map((l) => (
+                  <div
+                    key={l.id}
+                    className={
+                      l.level === 'error'
+                        ? 'text-red-400'
+                        : l.level === 'warn'
+                          ? 'text-amber-300'
+                          : l.source === 'rcon'
+                            ? 'text-sky-300'
+                            : l.source === 'steamcmd'
+                              ? 'text-neutral-400'
+                              : 'text-neutral-200'
+                    }
+                  >
+                    {l.text}
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
               <form
-                className="flex flex-1 gap-2"
+                className="mt-3 flex gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const msg = broadcast.trim().replace(/\s+/g, '_');
-                  if (!msg) return;
-                  void api.sendCommand(`Broadcast ${msg}`);
-                  setBroadcast('');
+                  if (!command.trim()) return;
+                  void api.sendCommand(command);
+                  setCommand('');
                 }}
               >
                 <input
-                  value={broadcast}
-                  onChange={(e) => setBroadcast(e.target.value)}
-                  placeholder="全体通知（Palworldの仕様で空白は _ に置換されます）"
-                  className="flex-1 rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  placeholder="RCONコマンド (例: Info / ShowPlayers)"
+                  className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm outline-none ring-1 ring-neutral-800 focus:ring-sky-600"
                 />
-                <button
-                  disabled={!canStop}
-                  className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
-                >
-                  通知
-                </button>
+                <button className="rounded bg-sky-600 px-4 py-2 text-sm hover:bg-sky-500">送信</button>
               </form>
             </div>
-            <div className="flex-1 overflow-auto rounded bg-black/60 p-3 font-mono text-xs leading-relaxed">
-              {logs.length === 0 && <div className="text-neutral-600">ログはまだありません。</div>}
-              {logs.map((l) => (
-                <div
-                  key={l.id}
-                  className={
-                    l.level === 'error'
-                      ? 'text-red-400'
-                      : l.level === 'warn'
-                        ? 'text-amber-300'
-                        : l.source === 'rcon'
-                          ? 'text-sky-300'
-                          : l.source === 'steamcmd'
-                            ? 'text-neutral-400'
-                            : 'text-neutral-200'
-                  }
-                >
-                  {l.text}
-                </div>
-              ))}
-              <div ref={logEndRef} />
-            </div>
-            <form
-              className="mt-3 flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!command.trim()) return;
-                void api.sendCommand(command);
-                setCommand('');
-              }}
-            >
-              <input
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="RCONコマンド (例: Broadcast Hello / ShowPlayers)"
-                className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm outline-none ring-1 ring-neutral-800 focus:ring-sky-600"
-              />
-              <button className="rounded bg-sky-600 px-4 py-2 text-sm hover:bg-sky-500">送信</button>
-            </form>
           </div>
         )}
 
-        {tab === 'settings' && (
-          <div className="max-w-2xl">
+        {tab === 'server' && (
+          <div className="max-w-3xl">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="text-xs text-neutral-500">プリセット:</span>
               {PRESETS.map((p) => (
@@ -466,61 +526,153 @@ export default function App() {
                   {p.label}
                 </button>
               ))}
-              <span className="text-xs text-neutral-600">（適用後に「設定を保存」を押してください）</span>
+              <input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="項目を検索..."
+                className="ml-auto rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+              />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {CONFIG_FIELDS.map((f) => (
-                <label key={f.key} className="flex flex-col gap-1 text-sm">
-                  <span className="text-neutral-400">{f.label}</span>
-                  {f.type === 'bool' ? (
-                    <input
-                      type="checkbox"
-                      checked={Boolean(draft[f.key])}
-                      onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.checked }))}
-                      className="h-5 w-5 accent-sky-600"
-                    />
-                  ) : f.type === 'enum' ? (
-                    <select
-                      value={String(draft[f.key] ?? '')}
-                      onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                      className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800"
-                    >
-                      {(f.options ?? []).map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-                      value={String(draft[f.key] ?? '')}
-                      step="any"
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value,
-                        }))
-                      }
-                      className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
-                    />
-                  )}
-                </label>
-              ))}
-            </div>
+
+            {configKeys.length === 0 ? (
+              <p className="text-sm text-neutral-500">
+                設定項目がありません。先にサーバーをインストールしてください。
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {configKeys.map((key) => {
+                  const v = draft[key];
+                  const label = LABELS[key] ?? key;
+                  return (
+                    <label key={key} className="flex flex-col gap-1 text-sm">
+                      <span className="truncate text-neutral-400" title={key}>
+                        {label}
+                      </span>
+                      {typeof v === 'boolean' ? (
+                        <input
+                          type="checkbox"
+                          checked={v}
+                          onChange={(e) => setField(key, e.target.checked)}
+                          className="h-5 w-5 accent-sky-600"
+                        />
+                      ) : ENUM_OPTIONS[key] ? (
+                        <select
+                          value={String(v)}
+                          onChange={(e) => setField(key, e.target.value)}
+                          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800"
+                        >
+                          {ENUM_OPTIONS[key].map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      ) : typeof v === 'number' ? (
+                        <input
+                          type="number"
+                          step="any"
+                          value={v}
+                          onChange={(e) => setField(key, Number(e.target.value))}
+                          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
+                        />
+                      ) : (
+                        <input
+                          type={/password/i.test(key) ? 'password' : 'text'}
+                          value={String(v)}
+                          onChange={(e) => setField(key, e.target.value)}
+                          className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
+                        />
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="mt-5 flex items-center gap-3">
               <button
                 disabled={busy}
-                onClick={saveConfig}
+                onClick={saveServerConfig}
                 className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
               >
-                設定を保存
+                サーバー設定を保存
               </button>
               {savedMsg && <span className="text-sm text-emerald-400">{savedMsg}</span>}
             </div>
+          </div>
+        )}
 
-            <div className="mt-8 rounded border border-red-900/60 p-4">
-              <h3 className="mb-1 text-sm font-medium text-red-400">危険な操作</h3>
+        {tab === 'manager' && (
+          <div className="max-w-2xl space-y-6">
+            <section className="rounded border border-neutral-800 p-4">
+              <h2 className="mb-3 font-medium">フォルダ</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void api.openServerFolder()}
+                  className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700"
+                >
+                  サーバーフォルダを開く
+                </button>
+                <button
+                  onClick={() => void api.openLogsFolder()}
+                  className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700"
+                >
+                  ログフォルダを開く
+                </button>
+                <button
+                  onClick={() => void api.openBackupsFolder()}
+                  className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700"
+                >
+                  バックアップフォルダを開く
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded border border-neutral-800 p-4">
+              <h2 className="mb-3 font-medium">アプリの動作</h2>
+              <div className="space-y-4">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-neutral-400">起動オプション（PalServer.exe に渡す引数）</span>
+                  <input
+                    value={launchArgs}
+                    onChange={(e) => setLaunchArgs(e.target.value)}
+                    placeholder="例: -useperfthreads -NoAsyncLoadingThread"
+                    className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={autoRestart}
+                    onChange={(e) => setAutoRestart(e.target.checked)}
+                    className="h-4 w-4 accent-sky-600"
+                  />
+                  クラッシュ時に自動で再起動する
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-neutral-400">RCON ポート</span>
+                  <input
+                    type="number"
+                    value={rconPort}
+                    onChange={(e) => setRconPort(Number(e.target.value))}
+                    className="w-40 rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
+                  />
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    disabled={busy}
+                    onClick={saveManager}
+                    className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    保存
+                  </button>
+                  {managerMsg && <span className="text-sm text-emerald-400">{managerMsg}</span>}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded border border-red-900/60 p-4">
+              <h2 className="mb-1 text-sm font-medium text-red-400">危険な操作</h2>
               <p className="mb-3 text-xs text-neutral-500">
                 インストール済みのサーバーファイル（数GB）とセーブデータを削除します。必要なら先にバックアップしてください。
               </p>
@@ -531,7 +683,7 @@ export default function App() {
               >
                 サーバーをアンインストール
               </button>
-            </div>
+            </section>
           </div>
         )}
 
@@ -690,7 +842,7 @@ export default function App() {
                 スケジュールを追加
               </button>
               <span className="text-xs text-neutral-500">
-                指定した曜日・時刻に自動で実行します（アプリ起動中のみ）。
+                指定した曜日・時刻に自動で実行します（アプリ常駐中に動作）。
               </span>
             </div>
             <div className="space-y-3">
@@ -753,76 +905,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {tab === 'players' && (
-          <div className="max-w-2xl">
-            <button
-              onClick={() => void api.showPlayers().then(setPlayers)}
-              className="mb-4 rounded bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500"
-            >
-              オンラインのプレイヤーを取得
-            </button>
-            <div className="divide-y divide-neutral-800 rounded border border-neutral-800">
-              {players.length === 0 && (
-                <div className="p-4 text-sm text-neutral-500">
-                  取得したプレイヤーはここに表示されます（RCONが有効な稼働中に取得できます）。
-                </div>
-              )}
-              {players.map((p, i) => (
-                <div key={`${p.steamId ?? p.name}-${i}`} className="flex items-center gap-3 p-3 text-sm">
-                  <div className="flex-1">
-                    <div className="text-neutral-100">{p.name}</div>
-                    <div className="font-mono text-xs text-neutral-500">
-                      {p.playerId ?? '-'} / {p.steamId ?? '-'}
-                    </div>
-                  </div>
-                  {p.steamId && (
-                    <button
-                      onClick={() => void api.sendCommand(`KickPlayer ${p.steamId}`)}
-                      className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
-                    >
-                      キック
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {tab === 'ini' && (
-          <div className="flex h-full flex-col">
-            <div className="mb-3 flex items-center gap-3">
-              <button
-                disabled={busy}
-                onClick={loadRawIni}
-                className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700 disabled:opacity-50"
-              >
-                再読み込み
-              </button>
-              <button
-                disabled={busy}
-                onClick={saveRawIni}
-                className="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500 disabled:opacity-50"
-              >
-                保存
-              </button>
-              {rawMsg && <span className="text-sm text-emerald-400">{rawMsg}</span>}
-              <span className="ml-auto text-xs text-neutral-500">
-                PalWorldSettings.ini を直接編集（上級者向け）
-              </span>
-            </div>
-            <textarea
-              value={rawIni}
-              onChange={(e) => setRawIni(e.target.value)}
-              spellCheck={false}
-              className="min-h-[420px] flex-1 rounded bg-black/60 p-3 font-mono text-xs leading-relaxed text-neutral-200 outline-none ring-1 ring-neutral-800 focus:ring-sky-600"
-            />
-            <p className="mt-2 text-xs text-neutral-500">
-              ※ 書式を壊すとサーバーが起動しなくなることがあります。RCONで制御するには
-              OptionSettings 内の RCONEnabled=True / AdminPassword を維持してください。
-            </p>
           </div>
         )}
       </main>
