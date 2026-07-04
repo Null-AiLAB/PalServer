@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import SetupWizard from './SetupWizard';
 import type {
   BackupInfo,
   LogLine,
@@ -126,6 +127,7 @@ export default function App() {
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [rawIni, setRawIni] = useState('');
   const [rawMsg, setRawMsg] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -141,6 +143,9 @@ export default function App() {
     void api.getPlayitStatus().then(setPlayit);
     void api.getLanAddress().then(setLan);
     void api.getSchedule().then(setSchedule);
+    void api.getSettings().then((s) => {
+      if (!s.setupComplete) setShowWizard(true);
+    });
     void refreshConfig();
     void refreshBackups();
 
@@ -249,6 +254,15 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
+      {showWizard && (
+        <SetupWizard
+          onDone={() => {
+            setShowWizard(false);
+            void api.getStatus().then(setStatus);
+            void refreshConfig();
+          }}
+        />
+      )}
       {/* Top bar */}
       <header className="flex items-center gap-4 border-b border-neutral-800 px-5 py-3">
         <div className="flex items-center gap-2">
