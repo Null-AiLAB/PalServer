@@ -75,6 +75,24 @@ const CONFIG_FIELDS: FieldDef[] = [
 
 const RCON_PORT_DEFAULT = 25575;
 
+const PRESETS: { name: string; label: string; values: PalOptions }[] = [
+  {
+    name: 'casual',
+    label: 'かんたん',
+    values: { Difficulty: 'Casual', DeathPenalty: 'None', ExpRate: 2, PalCaptureRate: 2, bIsPvP: false },
+  },
+  {
+    name: 'normal',
+    label: '標準',
+    values: { Difficulty: 'Normal', DeathPenalty: 'Item', ExpRate: 1, PalCaptureRate: 1, bIsPvP: false },
+  },
+  {
+    name: 'hardcore',
+    label: 'ハードコア',
+    values: { Difficulty: 'Hard', DeathPenalty: 'All', ExpRate: 1, PalCaptureRate: 1, bIsPvP: true },
+  },
+];
+
 function bytes(n: number): string {
   if (n <= 0) return '0 MB';
   return `${(n / 1024 / 1024).toFixed(0)} MB`;
@@ -227,6 +245,8 @@ export default function App() {
       setTimeout(() => setRawMsg(''), 5000);
     });
 
+  const applyPreset = (values: PalOptions) => setDraft((d) => ({ ...d, ...values }));
+
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
       {/* Top bar */}
@@ -329,6 +349,12 @@ export default function App() {
               >
                 プレイヤー確認
               </button>
+              <button
+                onClick={() => void api.openLogsFolder()}
+                className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
+              >
+                ログフォルダ
+              </button>
               <form
                 className="flex flex-1 gap-2"
                 onSubmit={(e) => {
@@ -397,6 +423,19 @@ export default function App() {
 
         {tab === 'settings' && (
           <div className="max-w-2xl">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-neutral-500">プリセット:</span>
+              {PRESETS.map((p) => (
+                <button
+                  key={p.name}
+                  onClick={() => applyPreset(p.values)}
+                  className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
+                >
+                  {p.label}
+                </button>
+              ))}
+              <span className="text-xs text-neutral-600">（適用後に「設定を保存」を押してください）</span>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {CONFIG_FIELDS.map((f) => (
                 <label key={f.key} className="flex flex-col gap-1 text-sm">
