@@ -43,6 +43,7 @@ const api: AppApi = {
   setSchedule: (entries) => ipcRenderer.invoke('schedule:set', entries),
 
   openLogsFolder: () => ipcRenderer.invoke('log:openFolder'),
+  openServerFolder: () => ipcRenderer.invoke('system:openServerFolder'),
 
   getLanAddress: () => ipcRenderer.invoke('system:lanAddress'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
