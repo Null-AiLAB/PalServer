@@ -128,6 +128,7 @@ export default function App() {
   const [rawIni, setRawIni] = useState('');
   const [rawMsg, setRawMsg] = useState('');
   const [showWizard, setShowWizard] = useState(false);
+  const [playitAuto, setPlayitAuto] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -145,6 +146,7 @@ export default function App() {
     void api.getSchedule().then(setSchedule);
     void api.getSettings().then((s) => {
       if (!s.setupComplete) setShowWizard(true);
+      setPlayitAuto(!!s.playitAutoStart);
     });
     void refreshConfig();
     void refreshBackups();
@@ -251,6 +253,22 @@ export default function App() {
     });
 
   const applyPreset = (values: PalOptions) => setDraft((d) => ({ ...d, ...values }));
+
+  const togglePlayitAuto = (v: boolean) => {
+    setPlayitAuto(v);
+    void api.setSettings({ playitAutoStart: v });
+  };
+
+  const uninstallServer = () =>
+    withBusy(async () => {
+      if (!window.confirm('サーバーのインストール済みファイルを削除します。セーブデータも消えます。よろしいですか？')) {
+        return;
+      }
+      const res = await api.uninstallServer();
+      if (!res.ok) window.alert(`アンインストールに失敗しました: ${res.error ?? ''}`);
+      await api.getStatus().then(setStatus);
+      await refreshBackups();
+    });
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
@@ -500,6 +518,20 @@ export default function App() {
               </button>
               {savedMsg && <span className="text-sm text-emerald-400">{savedMsg}</span>}
             </div>
+
+            <div className="mt-8 rounded border border-red-900/60 p-4">
+              <h3 className="mb-1 text-sm font-medium text-red-400">危険な操作</h3>
+              <p className="mb-3 text-xs text-neutral-500">
+                インストール済みのサーバーファイル（数GB）とセーブデータを削除します。必要なら先にバックアップしてください。
+              </p>
+              <button
+                disabled={busy || canStop}
+                onClick={uninstallServer}
+                className="rounded bg-red-700 px-3 py-2 text-sm hover:bg-red-600 disabled:opacity-40"
+              >
+                サーバーをアンインストール
+              </button>
+            </div>
           </div>
         )}
 
@@ -558,10 +590,27 @@ export default function App() {
                 {playit.message && <span className="text-sm text-neutral-400">{playit.message}</span>}
               </div>
               {playit.tunnelAddress && (
-                <div className="mt-3 rounded bg-neutral-900 p-3 text-sm">
-                  公開アドレス: <span className="font-mono text-emerald-300">{playit.tunnelAddress}</span>
+                <div className="mt-3 flex items-center gap-2 rounded bg-neutral-900 p-3 text-sm">
+                  <span>
+                    公開アドレス: <span className="font-mono text-emerald-300">{playit.tunnelAddress}</span>
+                  </span>
+                  <button
+                    onClick={() => copy(playit.tunnelAddress ?? '')}
+                    className="ml-auto rounded bg-neutral-800 px-3 py-1 text-xs hover:bg-neutral-700"
+                  >
+                    コピー
+                  </button>
                 </div>
               )}
+              <label className="mt-3 flex items-center gap-2 text-sm text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={playitAuto}
+                  onChange={(e) => togglePlayitAuto(e.target.checked)}
+                  className="h-4 w-4 accent-sky-600"
+                />
+                サーバーの起動/停止に合わせて playit を自動で開始/停止する
+              </label>
             </section>
 
             <section className="rounded border border-neutral-800 p-4">
