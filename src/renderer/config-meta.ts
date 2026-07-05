@@ -124,7 +124,7 @@ export const CONFIG_META: Record<string, FieldMeta> = {
   EquipmentDurabilityDamageRate: { ...rate(0, 3, '高いほど早く耐久が減ります。0で減りません。'), label: '装備の耐久消耗' },
   ItemWeightRate: { ...rate(0, 5, '高いほどアイテムが重くなります。'), label: 'アイテム重量倍率' },
   ItemCorruptionMultiplier: { ...rate(0, 5, '高いほど早く腐敗します。0で腐敗しません。'), label: 'アイテム腐敗速度' },
-  RespawnPenaltyTimeScale: { ...rate(1, 5, '高いほదリスポーン待ち時間が長くなります。'), label: 'リスポーン時間の倍率' },
+  RespawnPenaltyTimeScale: { ...rate(1, 5, '高いほどリスポーン待ち時間が長くなります。'), label: 'リスポーン時間の倍率' },
   DeathPenalty: {
     label: 'デスペナルティ',
     group: 'balance',
