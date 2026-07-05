@@ -588,7 +588,7 @@ export default function App() {
           <div className="max-w-4xl">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="text-xs text-neutral-500">
-                公式ガイド準拠の項目です。倍率はスライダー、オン/オフはトグルで調整できます。
+                公式ガイド準拠の項目です。スライダーはすべて「右（高い値）ほど項目名の効果が強くなる」向きに統一しています。
               </span>
               <input
                 value={filter}
