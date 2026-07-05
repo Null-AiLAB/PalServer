@@ -1,10 +1,10 @@
 // Japanese labels + UI control metadata for PalWorldSettings options.
 // Labels/behaviour are based on the official server guide (v0.7.2, game 0.7.3):
 // https://docs.palworldgame.com/ja/settings-and-operation/configuration/
-// NOTE: strict min/max are NOT officially published — the Palworld Wiki lists
-// every rate's accepted range as "TBD". Slider ranges below therefore mirror the
-// in-game world-settings sliders as a practical guide; the .ini accepts values
-// outside them, and the UI's number box + auto-expanding slider allow that.
+// Sliders are normalised so higher value = "more of the labelled quantity"
+// (no inverted "lower is faster" fields). Strict min/max are not officially
+// published (the wiki lists rate ranges as TBD); slider ranges mirror the
+// in-game world settings, and out-of-range values are still accepted.
 
 import type { PalOptionValue } from '../shared/types';
 
@@ -101,30 +101,30 @@ export const CONFIG_META: Record<string, FieldMeta> = {
   ExpRate: { ...rate(0.1, 20, '経験値の入手倍率。ソロは高めが快適。'), label: '経験値倍率' },
   PalCaptureRate: { ...rate(0.5, 2, '捕獲成功率の倍率。'), label: 'パル捕獲率' },
   PalSpawnNumRate: { ...rate(0.5, 3, '野生パルの出現数。上げると重くなります。'), label: 'パル出現数倍率' },
-  DayTimeSpeedRate: { ...rate(0.1, 5, '低いほど昼が長くなります。'), label: '昼の経過速度' },
-  NightTimeSpeedRate: { ...rate(0.1, 5, '低いほど夜が長くなります。'), label: '夜の経過速度' },
+  DayTimeSpeedRate: { ...rate(0.1, 5, '高いほど昼が速く過ぎ、昼が短くなります。'), label: '昼の経過速度' },
+  NightTimeSpeedRate: { ...rate(0.1, 5, '高いほど夜が速く過ぎ、夜が短くなります。'), label: '夜の経過速度' },
   PlayerDamageRateAttack: { ...rate(0.1, 5, 'プレイヤーの与ダメージ。'), label: 'プレイヤー与ダメージ倍率' },
   PlayerDamageRateDefense: { ...rate(0.1, 5, '高いほど受けるダメージが増えます。'), label: 'プレイヤー被ダメージ倍率' },
   PalDamageRateAttack: { ...rate(0.1, 5), label: 'パル与ダメージ倍率' },
   PalDamageRateDefense: { ...rate(0.1, 5, '高いほどパルが受けるダメージが増えます。'), label: 'パル被ダメージ倍率' },
-  PlayerStomachDecreaceRate: { ...rate(0.1, 5, '低いほど空腹になりにくい。'), label: 'プレイヤー満腹度の減少' },
-  PlayerStaminaDecreaceRate: { ...rate(0.1, 5, '低いほどスタミナが減りにくい。'), label: 'プレイヤースタミナの減少' },
+  PlayerStomachDecreaceRate: { ...rate(0.1, 5, '高いほど早く空腹になります。'), label: 'プレイヤー満腹度の減少' },
+  PlayerStaminaDecreaceRate: { ...rate(0.1, 5, '高いほど早くスタミナが減ります。'), label: 'プレイヤースタミナの減少' },
   PlayerAutoHPRegeneRate: { ...rate(0.1, 5, '高いほど自然回復が速い。'), label: 'プレイヤーHP自然回復' },
   PlayerAutoHpRegeneRateInSleep: { ...rate(0.1, 5), label: 'プレイヤー睡眠時HP回復' },
-  PalStomachDecreaceRate: { ...rate(0.1, 5), label: 'パル満腹度の減少' },
-  PalStaminaDecreaceRate: { ...rate(0.1, 5), label: 'パルスタミナの減少' },
+  PalStomachDecreaceRate: { ...rate(0.1, 5, '高いほど早く空腹になります。'), label: 'パル満腹度の減少' },
+  PalStaminaDecreaceRate: { ...rate(0.1, 5, '高いほど早くスタミナが減ります。'), label: 'パルスタミナの減少' },
   PalAutoHPRegeneRate: { ...rate(0.1, 5), label: 'パルHP自然回復' },
   PalAutoHpRegeneRateInSleep: { ...rate(0.1, 5, 'パルボックス内での回復。'), label: 'パル睡眠時HP回復' },
   BuildObjectDamageRate: { ...rate(0.5, 3), label: '建築物への被ダメージ倍率' },
-  BuildObjectDeteriorationDamageRate: { ...rate(0, 3, '0で劣化なし。'), label: '建築物の劣化速度' },
+  BuildObjectDeteriorationDamageRate: { ...rate(0, 3, '高いほど早く劣化します。0で劣化なし。'), label: '建築物の劣化速度' },
   CollectionDropRate: { ...rate(0.5, 3, '採集で入手できる量。'), label: '採集アイテム入手量' },
-  CollectionObjectHpRate: { ...rate(0.5, 3, '低いほど少ない手数で採集できます。'), label: '採集オブジェクトHP' },
-  CollectionObjectRespawnSpeedRate: { ...rate(0.5, 3, '※逆方向：低いほど早く再出現します。'), label: '採集オブジェクト再出現' },
+  CollectionObjectHpRate: { ...rate(0.5, 3, '高いほど採集に必要な手数が増えます。'), label: '採集オブジェクトのHP' },
+  CollectionObjectRespawnSpeedRate: { ...rate(0.5, 3, '高いほど再出現までが遅く（間隔が長く）なります。'), label: '採集オブジェクトの再出現間隔' },
   EnemyDropItemRate: { ...rate(0.5, 3), label: '敵ドロップ量倍率' },
-  EquipmentDurabilityDamageRate: { ...rate(0, 3, '0で耐久が減りません。'), label: '装備の耐久消耗' },
-  ItemWeightRate: { ...rate(0, 5, '低いほど重量が軽くなります。'), label: 'アイテム重量倍率' },
-  ItemCorruptionMultiplier: { ...rate(0, 5, '0で腐敗しません。'), label: 'アイテム腐敗速度' },
-  RespawnPenaltyTimeScale: { ...rate(1, 5), label: 'リスポーン時間の倍率' },
+  EquipmentDurabilityDamageRate: { ...rate(0, 3, '高いほど早く耐久が減ります。0で減りません。'), label: '装備の耐久消耗' },
+  ItemWeightRate: { ...rate(0, 5, '高いほどアイテムが重くなります。'), label: 'アイテム重量倍率' },
+  ItemCorruptionMultiplier: { ...rate(0, 5, '高いほど早く腐敗します。0で腐敗しません。'), label: 'アイテム腐敗速度' },
+  RespawnPenaltyTimeScale: { ...rate(1, 5, '高いほదリスポーン待ち時間が長くなります。'), label: 'リスポーン時間の倍率' },
   DeathPenalty: {
     label: 'デスペナルティ',
     group: 'balance',
