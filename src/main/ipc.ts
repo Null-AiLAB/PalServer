@@ -1,7 +1,7 @@
 // IPC wiring: exposes main-process managers to the renderer and forwards events.
 // Adapted from bedrock-server-manager/src/main/ipc.ts (MIT, (c) 2026 yuzum).
 
-import { ipcMain, shell, type BrowserWindow } from 'electron';
+import { ipcMain, shell, app, type BrowserWindow } from 'electron';
 import os from 'node:os';
 import fs from 'node:fs';
 import type { AppSettings, PalOptions, PlayerInfo } from '../shared/types';
@@ -10,6 +10,7 @@ import { playitManager } from './playit-manager';
 import { PalworldConfig, readRawConfig, writeRawConfig } from './palworld-config';
 import { readSettings, writeSettings } from './settings';
 import { isInstalled, serverDir } from './paths';
+import { checkForUpdates, downloadUpdate, quitAndInstall } from './updater';
 import { rconCommand } from './rcon';
 import { sampleMetrics } from './metrics';
 import { listBackups, createBackup, restoreBackup, openBackupsFolder } from './backup-manager';
@@ -148,4 +149,10 @@ export function registerIpc(getWindow: GetWindow): void {
   // misc
   ipcMain.handle('system:lanAddress', () => lanAddress());
   ipcMain.handle('app:openExternal', (_e, url: string) => shell.openExternal(url));
+
+  // in-app updates
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+  ipcMain.handle('update:check', () => checkForUpdates());
+  ipcMain.handle('update:download', () => downloadUpdate());
+  ipcMain.handle('update:install', () => quitAndInstall());
 }
