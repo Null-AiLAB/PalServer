@@ -517,29 +517,6 @@ export default function App() {
                 >
                   ログフォルダ
                 </button>
-                <form
-                  className="flex flex-1 gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const msg = broadcast.trim().replace(/\s+/g, '_');
-                    if (!msg) return;
-                    void api.sendCommand(`Broadcast ${msg}`);
-                    setBroadcast('');
-                  }}
-                >
-                  <input
-                    value={broadcast}
-                    onChange={(e) => setBroadcast(e.target.value)}
-                    placeholder="全体通知（空白は _ に置換されます）"
-                    className="flex-1 rounded bg-neutral-900 px-3 py-1.5 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
-                  />
-                  <button
-                    disabled={!canStop}
-                    className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
-                  >
-                    通知
-                  </button>
-                </form>
               </div>
               <div className="flex-1 overflow-auto rounded bg-black/60 p-3 font-mono text-xs leading-relaxed">
                 {logs.length === 0 && <div className="text-neutral-600">ログはまだありません。</div>}
@@ -563,6 +540,37 @@ export default function App() {
                 ))}
                 <div ref={logEndRef} />
               </div>
+
+              {/* Server message (Broadcast) box */}
+              <div className="mt-3 rounded border border-neutral-800 p-2">
+                <div className="mb-1 text-xs font-medium text-neutral-300">
+                  サーバーメッセージ送信（参加者全員に表示）
+                </div>
+                <form
+                  className="flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const msg = broadcast.trim().replace(/\s+/g, '_');
+                    if (!msg) return;
+                    void api.sendCommand(`Broadcast ${msg}`);
+                    setBroadcast('');
+                  }}
+                >
+                  <input
+                    value={broadcast}
+                    onChange={(e) => setBroadcast(e.target.value)}
+                    placeholder="メッセージを入力（Palworldの仕様で空白は _ に置換されます）"
+                    className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm ring-1 ring-neutral-800 focus:ring-sky-600"
+                  />
+                  <button
+                    disabled={!canStop}
+                    className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-40"
+                  >
+                    送信
+                  </button>
+                </form>
+              </div>
+
               <form
                 className="mt-3 flex gap-2"
                 onSubmit={(e) => {
