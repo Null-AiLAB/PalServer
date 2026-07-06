@@ -180,7 +180,12 @@ class ServerManager extends EventEmitter {
     }
 
     this.ensureRconConfig();
-    const exe = palServerExe();
+    // Launch the shipping executable directly when it exists. The PalServer.exe
+    // launcher spawns the real server in a *new* console (CMD) window that our
+    // flags can't suppress; running the shipping exe ourselves with
+    // windowsHide keeps it hidden and gives us the real server PID.
+    const shippingExe = path.join(serverDir(), 'Pal', 'Binaries', 'Win64', 'PalServer-Win64-Shipping.exe');
+    const exe = fs.existsSync(shippingExe) ? shippingExe : palServerExe();
     const cwd = serverDir();
     const extra = (readSettings().launchArgs ?? '').split(' ').filter(Boolean);
 
@@ -189,7 +194,11 @@ class ServerManager extends EventEmitter {
     this.log(`サーバーを起動します: ${exe}`);
 
     try {
-      this.child = spawn(exe, extra, { cwd, windowsHide: true });
+      this.child = spawn(exe, extra, {
+        cwd,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (err) {
       this.setStatus('error');
       this.child = null;
