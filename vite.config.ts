@@ -17,7 +17,13 @@ export default defineConfig({
     electron({
       main: {
         entry: 'src/main/index.ts',
-        vite: { build: { outDir: 'dist-electron/main', sourcemap: true } },
+        vite: {
+          build: {
+            outDir: 'dist-electron/main',
+            sourcemap: true,
+            rollupOptions: { external: ['electron-updater'] },
+          },
+        },
       },
       preload: {
         input: 'src/main/preload.ts',
