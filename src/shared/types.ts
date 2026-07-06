@@ -54,6 +54,24 @@ export interface InstallState {
   installed: boolean;
 }
 
+// ---- in-app updates (electron-updater) ----
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+export interface UpdateStatus {
+  state: UpdateState;
+  currentVersion?: string;
+  version?: string; // available / downloaded version
+  percent?: number; // download progress (0-100)
+  message?: string; // error message
+}
+
 // ---- scheduler ----
 export type ScheduleAction = 'start' | 'stop' | 'restart' | 'backup';
 
@@ -140,8 +158,14 @@ export interface AppApi {
   getLanAddress(): Promise<string>;
   openExternal(url: string): Promise<void>;
 
+  getAppVersion(): Promise<string>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  downloadUpdate(): Promise<UpdateStatus>;
+  quitAndInstall(): Promise<void>;
+
   onLog(cb: (l: LogLine) => void): () => void;
   onStatus(cb: (s: ServerStatus) => void): () => void;
   onMetrics(cb: (m: SystemMetrics) => void): () => void;
   onPlayitStatus(cb: (s: PlayitStatus) => void): () => void;
+  onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
 }
