@@ -12,6 +12,7 @@ import type {
   ScheduleEntry,
   ServerStatus,
   SystemMetrics,
+  UpdateStatus,
 } from '../shared/types';
 
 const api = window.api;
@@ -92,6 +93,10 @@ export default function App() {
   const [rconPort, setRconPort] = useState(RCON_PORT_DEFAULT);
   const [managerMsg, setManagerMsg] = useState('');
 
+  // in-app update
+  const [appVersion, setAppVersion] = useState('');
+  const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
+
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const refreshConfig = useCallback(async () => {
@@ -120,16 +125,19 @@ export default function App() {
     });
     void refreshConfig();
     void refreshBackups();
+    void api.getAppVersion().then(setAppVersion);
 
     const offLog = api.onLog((l) => setLogs((prev) => [...prev.slice(-500), l]));
     const offStatus = api.onStatus(setStatus);
     const offMetrics = api.onMetrics(setMetrics);
     const offPlayit = api.onPlayitStatus(setPlayit);
+    const offUpdate = api.onUpdateStatus(setUpdate);
     return () => {
       offLog();
       offStatus();
       offMetrics();
       offPlayit();
+      offUpdate();
     };
   }, [refreshConfig, refreshBackups]);
 
@@ -642,6 +650,62 @@ export default function App() {
 
         {tab === 'manager' && (
           <div className="max-w-2xl space-y-6">
+            <section className="rounded border border-neutral-800 p-4">
+              <h2 className="mb-3 font-medium">アップデート</h2>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-neutral-400">
+                  現在のバージョン: <span className="font-mono text-neutral-200">v{appVersion || '—'}</span>
+                </span>
+                <button
+                  disabled={update.state === 'checking' || update.state === 'downloading'}
+                  onClick={() => void api.checkForUpdates().then(setUpdate)}
+                  className="rounded bg-sky-600 px-3 py-1.5 text-sm hover:bg-sky-500 disabled:opacity-50"
+                >
+                  更新を確認
+                </button>
+                {update.state === 'available' && (
+                  <button
+                    onClick={() => void api.downloadUpdate().then(setUpdate)}
+                    className="rounded bg-emerald-600 px-3 py-1.5 text-sm hover:bg-emerald-500"
+                  >
+                    ダウンロード
+                  </button>
+                )}
+                {update.state === 'downloaded' && (
+                  <button
+                    onClick={() => void api.quitAndInstall()}
+                    className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium hover:bg-emerald-500"
+                  >
+                    再起動して更新
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 text-xs">
+                {update.state === 'checking' && <span className="text-neutral-400">確認中...</span>}
+                {update.state === 'not-available' && (
+                  <span className="text-emerald-400">最新版を使用しています。</span>
+                )}
+                {update.state === 'available' && (
+                  <span className="text-sky-300">新しいバージョン v{update.version} が利用可能です。</span>
+                )}
+                {update.state === 'downloading' && (
+                  <span className="text-neutral-300">ダウンロード中... {update.percent ?? 0}%</span>
+                )}
+                {update.state === 'downloaded' && (
+                  <span className="text-emerald-400">
+                    v{update.version} のダウンロードが完了しました。再起動すると適用されます。
+                  </span>
+                )}
+                {update.state === 'error' && <span className="text-red-400">{update.message}</span>}
+              </div>
+              <button
+                onClick={() => void api.openExternal('https://github.com/Null-AiLAB/PalServer/releases')}
+                className="mt-2 text-xs text-sky-400 hover:underline"
+              >
+                リリースページを開く
+              </button>
+            </section>
+
             <section className="rounded border border-neutral-800 p-4">
               <h2 className="mb-3 font-medium">フォルダ</h2>
               <div className="flex gap-2">
