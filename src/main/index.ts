@@ -5,6 +5,7 @@ import { serverManager } from './server-manager';
 import { playitManager } from './playit-manager';
 import { ensureDirs } from './paths';
 import { startScheduler } from './scheduler';
+import { initUpdater } from './updater';
 import { TRAY_ICON_DATA_URL } from './tray-icon';
 
 // vite-plugin-electron compiles this file to CommonJS, so __dirname is available.
@@ -93,6 +94,7 @@ void app.whenReady().then(() => {
   ensureDirs();
   registerIpc(() => mainWindow);
   startScheduler();
+  initUpdater(() => mainWindow);
   createTray();
   createWindow();
 
