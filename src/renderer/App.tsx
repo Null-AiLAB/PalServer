@@ -97,6 +97,9 @@ export default function App() {
   const [appVersion, setAppVersion] = useState('');
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
 
+  // per-entry "add warning minute" input
+  const [warnInput, setWarnInput] = useState<Record<string, string>>({});
+
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const refreshConfig = useCallback(async () => {
@@ -255,6 +258,22 @@ export default function App() {
   const removeScheduleEntry = (id: string) => {
     persistSchedule(schedule.filter((e) => e.id !== id));
   };
+  const addWarnMinute = (id: string) => {
+    const min = Math.floor(Number(warnInput[id] ?? ''));
+    if (!min || min <= 0) return;
+    const e = schedule.find((x) => x.id === id);
+    if (!e) return;
+    const set = new Set([...(e.warnMinutes ?? []), min]);
+    updateScheduleEntry(id, { warnMinutes: [...set].sort((a, b) => b - a) });
+    setWarnInput((w) => ({ ...w, [id]: '' }));
+  };
+  const removeWarnMinute = (id: string, min: number) => {
+    const e = schedule.find((x) => x.id === id);
+    if (!e) return;
+    updateScheduleEntry(id, { warnMinutes: (e.warnMinutes ?? []).filter((m) => m !== min) });
+  };
+  const actionNoun = (a: ScheduleAction) =>
+    a === 'stop' ? 'シャットダウン' : a === 'backup' ? 'バックアップ' : a === 'start' ? '起動' : '再起動';
 
   // Group the config keys (filter matches key or Japanese label).
   const groupedKeys = useMemo(() => {
@@ -1004,6 +1023,74 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+
+                  {e.action === 'start' ? (
+                    <p className="mt-3 border-t border-neutral-800 pt-3 text-xs text-neutral-600">
+                      「起動」ではサーバーが停止中のため、事前告知は送信されません。
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-2 border-t border-neutral-800 pt-3">
+                      <div className="text-xs text-neutral-400">
+                        事前告知（サーバー稼働中に参加者全員へ自動送信）
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-neutral-500">分前告知:</span>
+                        {(e.warnMinutes ?? []).length === 0 && (
+                          <span className="text-xs text-neutral-600">なし</span>
+                        )}
+                        {(e.warnMinutes ?? []).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => removeWarnMinute(e.id, m)}
+                            className="rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-red-600"
+                            title="クリックで削除"
+                          >
+                            {m}分前 ×
+                          </button>
+                        ))}
+                        <input
+                          type="number"
+                          min={1}
+                          value={warnInput[e.id] ?? ''}
+                          onChange={(ev) => setWarnInput((w) => ({ ...w, [e.id]: ev.target.value }))}
+                          onKeyDown={(ev) => {
+                            if (ev.key === 'Enter') addWarnMinute(e.id);
+                          }}
+                          placeholder="分"
+                          className="w-16 rounded bg-neutral-900 px-2 py-1 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+                        />
+                        <button
+                          onClick={() => addWarnMinute(e.id)}
+                          className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700"
+                        >
+                          追加
+                        </button>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs text-neutral-500">
+                        カウントダウン開始:
+                        <input
+                          type="number"
+                          min={0}
+                          max={60}
+                          value={e.countdownSec ?? 0}
+                          onChange={(ev) =>
+                            updateScheduleEntry(e.id, {
+                              countdownSec: Math.min(60, Math.max(0, Math.floor(Number(ev.target.value)))),
+                            })
+                          }
+                          className="w-20 rounded bg-neutral-900 px-2 py-1 text-xs ring-1 ring-neutral-800 focus:ring-sky-600"
+                        />
+                        秒前から（0でオフ・最大60）
+                      </label>
+
+                      <p className="text-[11px] leading-relaxed text-neutral-600">
+                        例: 分前告知「サーバーは5分後に自動で{actionNoun(e.action)}されます。」／
+                        カウントダウン「サーバー{actionNoun(e.action)}まであと10秒」→「9…」→「8…」…
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
