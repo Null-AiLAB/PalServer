@@ -44,7 +44,7 @@ const rate = (min: number, max: number, help?: string): FieldMeta => ({
 
 export const CONFIG_META: Record<string, FieldMeta> = {
   // ---- サーバー ----
-  ServerName: { label: 'サーバー名', group: 'server', control: 'text', example: '例: TBH Palworld Server' },
+  ServerName: { label: 'サーバー名', group: 'server', control: 'text', example: '例: My Server 01' },
   ServerDescription: { label: 'サーバー説明', group: 'server', control: 'text', example: '一覧に表示される紹介文' },
   ServerPassword: {
     label: '参加パスワード',
@@ -58,7 +58,7 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     group: 'server',
     control: 'text',
     password: true,
-    help: 'アプリからの停止・コマンド送信に必要です。例: Abc-311088',
+    help: 'アプリからの停止・コマンド送信に必要です。例: Kx7-3pR9mq',
   },
   ServerPlayerMaxNum: { label: '最大参加人数', group: 'server', control: 'slider', min: 1, max: 32, step: 1, help: 'ハード上限は 32。近づくほど負荷が増えます。' },
   PublicPort: { label: '公開ポート', group: 'server', control: 'number', help: '通常は 8211。' },
@@ -67,7 +67,7 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     group: 'server',
     control: 'text',
     help: 'コミュニティ掲載時のみ。ポートは含めずIPだけを入力。',
-    example: '例: 203.0.113.10',
+    example: '例: 198.51.100.42',
   },
   CrossplayPlatforms: {
     label: 'クロスプレイ対象',
