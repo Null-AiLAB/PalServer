@@ -81,6 +81,8 @@ export interface ScheduleEntry {
   days: number[]; // 0=Sun .. 6=Sat
   time: string; // "HH:MM" (local)
   action: ScheduleAction;
+  warnMinutes?: number[]; // e.g. [5,1] -> "N分後に…" を各タイミングで送信
+  countdownSec?: number; // 例: 10 -> 実行N秒前から秒読み。0/未設定でオフ
 }
 
 // ---- playit.gg ----
