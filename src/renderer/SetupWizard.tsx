@@ -105,7 +105,7 @@ export default function SetupWizard({ onDone }: { onDone: () => void }) {
                 type="password"
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="例: Abc-311088"
+                placeholder="例: Kx7-3pR9mq"
                 className="rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
               />
             </label>
