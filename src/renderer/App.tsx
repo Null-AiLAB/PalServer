@@ -125,6 +125,7 @@ export default function App() {
       setLaunchArgs(s.launchArgs ?? '');
       setAutoRestart(!!s.autoRestart);
       setRconPort(s.rconPort ?? RCON_PORT_DEFAULT);
+      setSecret(s.playitSecret ?? '');
     });
     void refreshConfig();
     void refreshBackups();
@@ -211,6 +212,15 @@ export default function App() {
     setPlayitAuto(v);
     void api.setSettings({ playitAutoStart: v });
   };
+
+  // Persist whatever is in the secret field before enabling, so a freshly typed
+  // (but not yet "saved") key still works — and stays saved for next time.
+  const enablePlayitWithSecret = () =>
+    void (async () => {
+      const s = secret.trim();
+      if (s) await api.setPlayitSecret(s);
+      setPlayit(await api.enablePlayit());
+    })();
 
   const uninstallServer = () =>
     withBusy(async () => {
@@ -838,6 +848,9 @@ export default function App() {
                   保存
                 </button>
               </div>
+              <p className="mt-1 text-xs text-neutral-500">
+                一度保存すればアプリを更新しても保持されます（次回以降の再入力は不要）。
+              </p>
               <div className="mt-3 flex items-center gap-3">
                 {playit.state === 'connected' ? (
                   <button
@@ -848,7 +861,7 @@ export default function App() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => void api.enablePlayit().then(setPlayit)}
+                    onClick={enablePlayitWithSecret}
                     className="rounded bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500"
                   >
                     有効化
