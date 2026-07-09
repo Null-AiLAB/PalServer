@@ -13,11 +13,14 @@ import type {
   ServerStatus,
   SystemMetrics,
   UpdateStatus,
+  ModManagerState,
+  ModSearchItem,
+  ModFramework,
 } from '../shared/types';
 
 const api = window.api;
 
-type Tab = 'console' | 'server' | 'manager' | 'network' | 'backup' | 'schedule';
+type Tab = 'console' | 'server' | 'manager' | 'network' | 'backup' | 'schedule' | 'mods';
 
 const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 const ACTION_OPTIONS: { value: ScheduleAction; label: string }[] = [
@@ -100,6 +103,16 @@ export default function App() {
   // per-entry "add warning minute" input
   const [warnInput, setWarnInput] = useState<Record<string, string>>({});
 
+  // mods
+  const [modState, setModState] = useState<ModManagerState | null>(null);
+  const [cfKey, setCfKey] = useState('');
+  const [modQuery, setModQuery] = useState('');
+  const [serverOnly, setServerOnly] = useState(true);
+  const [modResults, setModResults] = useState<ModSearchItem[]>([]);
+  const [modBusy, setModBusy] = useState(false);
+  const [modMsg, setModMsg] = useState('');
+  const [editCfg, setEditCfg] = useState<{ path: string; text: string } | null>(null);
+
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const refreshConfig = useCallback(async () => {
@@ -130,6 +143,7 @@ export default function App() {
     void refreshConfig();
     void refreshBackups();
     void api.getAppVersion().then(setAppVersion);
+    void api.getModState().then(setModState);
 
     const offLog = api.onLog((l) => setLogs((prev) => [...prev.slice(-500), l]));
     const offStatus = api.onStatus(setStatus);
@@ -284,6 +298,85 @@ export default function App() {
   };
   const actionNoun = (a: ScheduleAction) =>
     a === 'stop' ? 'シャットダウン' : a === 'backup' ? 'バックアップ' : a === 'start' ? '起動' : '再起動';
+
+  // ---- mods ----
+  const refreshModState = () => void api.getModState().then(setModState);
+  const flashModMsg = (m: string) => {
+    setModMsg(m);
+    setTimeout(() => setModMsg(''), 6000);
+  };
+  const withModBusy = async (fn: () => Promise<unknown>) => {
+    setModBusy(true);
+    try {
+      await fn();
+    } finally {
+      setModBusy(false);
+    }
+  };
+  const saveCfKey = () =>
+    void withModBusy(async () => {
+      setModState(await api.setCurseforgeKey(cfKey.trim()));
+      flashModMsg('APIキーを保存しました。');
+    });
+  const runModSearch = () =>
+    void withModBusy(async () => {
+      try {
+        setModResults(await api.searchMods(modQuery, serverOnly));
+      } catch (e) {
+        flashModMsg(`検索に失敗しました: ${(e as Error).message}`);
+      }
+    });
+  const doInstall = (id: number) =>
+    void withModBusy(async () => {
+      const r = await api.installMod(id);
+      flashModMsg(r.ok ? `導入しました。${r.warning ?? ''}` : `失敗: ${r.error}`);
+      refreshModState();
+    });
+  const doUninstall = (id: number) =>
+    void withModBusy(async () => {
+      const r = await api.uninstallMod(id);
+      flashModMsg(r.ok ? '削除しました。' : `失敗: ${r.error}`);
+      refreshModState();
+    });
+  const doToggle = (id: number, enabled: boolean) =>
+    void withModBusy(async () => {
+      const r = await api.setModEnabled(id, enabled);
+      if (!r.ok) flashModMsg(`失敗: ${r.error}`);
+      else if (r.warning) flashModMsg(r.warning);
+      refreshModState();
+    });
+  const doFramework = (which: ModFramework) =>
+    void withModBusy(async () => {
+      const r = await api.installFramework(which);
+      flashModMsg(r.ok ? (r.warning ?? '導入しました。') : `失敗: ${r.error}`);
+      refreshModState();
+    });
+  const openCfg = (relPath: string) =>
+    void withModBusy(async () => {
+      try {
+        setEditCfg({ path: relPath, text: await api.readModConfig(relPath) });
+      } catch (e) {
+        flashModMsg(`読み込み失敗: ${(e as Error).message}`);
+      }
+    });
+  const saveCfg = () =>
+    void withModBusy(async () => {
+      if (!editCfg) return;
+      const r = await api.writeModConfig(editCfg.path, editCfg.text);
+      flashModMsg(r.ok ? `保存しました。${r.warning ?? ''}` : `失敗: ${r.error}`);
+      if (r.ok) setEditCfg(null);
+    });
+  const exportClient = () =>
+    void withModBusy(async () => {
+      const r = await api.exportClientPack();
+      flashModMsg(r.ok ? 'クライアント配布パックを書き出しました（フォルダを開きます）。' : `失敗: ${r.error}`);
+    });
+  const serverBadge = (h: ModSearchItem['serverHint']) =>
+    h === 'yes'
+      ? { t: 'サーバー対応', c: 'bg-emerald-700 text-emerald-100' }
+      : h === 'client-only'
+        ? { t: 'クライアント向け', c: 'bg-amber-800 text-amber-100' }
+        : { t: '要確認', c: 'bg-neutral-700 text-neutral-200' };
 
   // Group the config keys (filter matches key or Japanese label).
   const groupedKeys = useMemo(() => {
@@ -483,6 +576,7 @@ export default function App() {
           ['network', 'ネットワーク'],
           ['backup', 'バックアップ'],
           ['schedule', 'スケジュール'],
+          ['mods', 'MOD'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -1107,6 +1201,251 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {tab === 'mods' && (
+          <div className="max-w-4xl space-y-6">
+            {!modState?.hasApiKey ? (
+              <section className="rounded border border-neutral-800 p-4">
+                <h2 className="mb-2 font-medium">CurseForge APIキー</h2>
+                <p className="mb-3 text-xs text-neutral-500">
+                  MOD検索・自動導入には CurseForge のAPIキーが必要です（無料）。1度貼れば保存され、更新後も保持されます。
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={cfKey}
+                    onChange={(e) => setCfKey(e.target.value)}
+                    placeholder="CurseForge APIキー"
+                    className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm ring-1 ring-neutral-800 focus:ring-sky-600"
+                  />
+                  <button
+                    disabled={modBusy}
+                    onClick={saveCfKey}
+                    className="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    保存
+                  </button>
+                </div>
+                <button
+                  onClick={() => void api.openExternal('https://console.curseforge.com/')}
+                  className="mt-2 text-xs text-sky-400 hover:underline"
+                >
+                  APIキーを取得する（CurseForge Console）
+                </button>
+              </section>
+            ) : (
+              <>
+                {/* Frameworks */}
+                <section className="rounded border border-neutral-800 p-4">
+                  <h2 className="mb-2 font-medium">MODフレームワーク</h2>
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span className={modState.frameworks.palSchema ? 'text-emerald-400' : 'text-neutral-500'}>
+                      PalSchema: {modState.frameworks.palSchema ? '導入済み' : '未導入'}
+                    </span>
+                    <button
+                      disabled={modBusy}
+                      onClick={() => doFramework('palschema')}
+                      className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-50"
+                    >
+                      PalSchemaを準備
+                    </button>
+                    <span className={modState.frameworks.ue4ss ? 'text-emerald-400' : 'text-neutral-500'}>
+                      UE4SS: {modState.frameworks.ue4ss ? '導入済み' : '未導入'}
+                    </span>
+                    <button
+                      disabled={modBusy}
+                      onClick={() => doFramework('ue4ss')}
+                      className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-50"
+                    >
+                      RE-UE4SSを導入
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-amber-300/90">
+                    ⚠ UE4SS系は現在、専用サーバーで「全員がキャラ作成画面に飛ばされる」不具合が報告されています。
+                    まず .pak / PalSchema 系を優先し、UE4SSはテスト環境で確認してからにしてください。
+                  </p>
+                </section>
+
+                {/* Search */}
+                <section className="rounded border border-neutral-800 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={modQuery}
+                      onChange={(e) => setModQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && runModSearch()}
+                      placeholder="MODを検索（空欄で人気順）..."
+                      className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm ring-1 ring-neutral-800 focus:ring-sky-600"
+                    />
+                    <label className="flex items-center gap-1 text-xs text-neutral-400">
+                      <input
+                        type="checkbox"
+                        checked={serverOnly}
+                        onChange={(e) => setServerOnly(e.target.checked)}
+                        className="h-4 w-4 accent-sky-600"
+                      />
+                      サーバー向けのみ
+                    </label>
+                    <button
+                      disabled={modBusy}
+                      onClick={runModSearch}
+                      className="rounded bg-sky-600 px-3 py-2 text-sm hover:bg-sky-500 disabled:opacity-50"
+                    >
+                      検索
+                    </button>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {modResults.length === 0 && (
+                      <p className="text-xs text-neutral-600">検索するとここに一覧が表示されます。</p>
+                    )}
+                    {modResults.map((m) => {
+                      const badge = serverBadge(m.serverHint);
+                      const isInstalled = modState.installed.some((x) => x.id === m.id);
+                      return (
+                        <div key={m.id} className="flex gap-3 rounded border border-neutral-800 p-2">
+                          {m.logoUrl && (
+                            <img src={m.logoUrl} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium text-neutral-100">{m.name}</span>
+                              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${badge.c}`}>
+                                {badge.t}
+                              </span>
+                            </div>
+                            <p className="line-clamp-2 text-xs text-neutral-400">{m.summary}</p>
+                            <div className="mt-0.5 text-[11px] text-neutral-600">
+                              {m.author && <>作者 {m.author}・</>}
+                              DL {m.downloadCount.toLocaleString()}
+                              {m.dateModified && <>・更新 {new Date(m.dateModified).toLocaleDateString()}</>}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <button
+                              disabled={modBusy || isInstalled}
+                              onClick={() => doInstall(m.id)}
+                              className="rounded bg-emerald-600 px-3 py-1 text-xs hover:bg-emerald-500 disabled:opacity-40"
+                            >
+                              {isInstalled ? '導入済み' : 'インストール'}
+                            </button>
+                            {m.websiteUrl && (
+                              <button
+                                onClick={() => m.websiteUrl && void api.openExternal(m.websiteUrl)}
+                                className="text-[11px] text-sky-400 hover:underline"
+                              >
+                                詳細
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Installed */}
+                <section className="rounded border border-neutral-800 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h2 className="font-medium">導入済みMOD ({modState.installed.length})</h2>
+                    <button
+                      disabled={modBusy}
+                      onClick={exportClient}
+                      className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-50"
+                      title="参加者に配る必要があるMODをまとめて書き出します"
+                    >
+                      クライアント配布パックを書き出し
+                    </button>
+                  </div>
+                  {modState.installed.length === 0 ? (
+                    <p className="text-xs text-neutral-600">まだ導入済みのMODはありません。</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {modState.installed.map((m) => (
+                        <div key={m.id} className="rounded border border-neutral-800 p-2 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-1" title="有効/無効">
+                              <input
+                                type="checkbox"
+                                checked={m.enabled}
+                                onChange={(e) => doToggle(m.id, e.target.checked)}
+                                className="h-4 w-4 accent-sky-600"
+                              />
+                            </label>
+                            <span className="truncate font-medium text-neutral-100">{m.name}</span>
+                            <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-300">
+                              {m.installType}
+                            </span>
+                            {m.clientRequired && (
+                              <span className="rounded bg-amber-800 px-1.5 py-0.5 text-[10px] text-amber-100">
+                                要クライアント導入
+                              </span>
+                            )}
+                            <div className="ml-auto flex items-center gap-2">
+                              {m.configFiles.length > 0 &&
+                                m.configFiles.map((cf) => (
+                                  <button
+                                    key={cf}
+                                    onClick={() => openCfg(cf)}
+                                    className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700"
+                                    title={cf}
+                                  >
+                                    Config編集
+                                  </button>
+                                ))}
+                              <button
+                                disabled={modBusy}
+                                onClick={() => doUninstall(m.id)}
+                                className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-red-600 disabled:opacity-50"
+                              >
+                                削除
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {modMsg && <p className="text-sm text-emerald-400">{modMsg}</p>}
+              </>
+            )}
+
+            {/* Config editor */}
+            {editCfg && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+                <div className="flex h-[70vh] w-full max-w-3xl flex-col rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="truncate font-mono text-xs text-neutral-400">{editCfg.path}</span>
+                    <button onClick={() => setEditCfg(null)} className="text-xs text-neutral-500 hover:text-neutral-300">
+                      閉じる
+                    </button>
+                  </div>
+                  <textarea
+                    value={editCfg.text}
+                    onChange={(e) => setEditCfg({ ...editCfg, text: e.target.value })}
+                    spellCheck={false}
+                    className="flex-1 resize-none rounded bg-black/60 p-3 font-mono text-xs text-neutral-100 ring-1 ring-neutral-800 focus:ring-sky-600"
+                  />
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      onClick={() => setEditCfg(null)}
+                      className="rounded bg-neutral-800 px-4 py-2 text-sm hover:bg-neutral-700"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      disabled={modBusy}
+                      onClick={saveCfg}
+                      className="rounded bg-emerald-600 px-4 py-2 text-sm hover:bg-emerald-500 disabled:opacity-50"
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
