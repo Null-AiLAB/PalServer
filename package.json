@@ -1,6 +1,6 @@
 {
   "name": "palworld-server-manager",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Windows desktop app for managing a Palworld Dedicated Server",
   "author": "Null-AiLAB",
