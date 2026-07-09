@@ -22,6 +22,7 @@ import {
   ensureDirs,
   isInstalled,
   palServerExe,
+  saveDir,
   serverDir,
   steamCmdExe,
   defaultSteamCmdDir,
@@ -360,6 +361,26 @@ class ServerManager extends EventEmitter {
       return { ok: true };
     } catch (e) {
       this.log(`アンインストールに失敗: ${(e as Error).message}`);
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  /** Delete just the world/save data (keeps the server install intact). */
+  deleteWorldData(): StartResult {
+    if (this.child) {
+      return { ok: false, error: '起動中はワールドを削除できません。先に停止してください。' };
+    }
+    try {
+      const dir = saveDir();
+      if (!fs.existsSync(dir)) {
+        this.log('削除対象のワールドデータが見つかりませんでした。');
+        return { ok: true };
+      }
+      fs.rmSync(dir, { recursive: true, force: true });
+      this.log('ワールドデータ（セーブ）を削除しました。次回の起動で新しいワールドが作成されます。');
+      return { ok: true };
+    } catch (e) {
+      this.log(`ワールド削除に失敗: ${(e as Error).message}`);
       return { ok: false, error: (e as Error).message };
     }
   }
