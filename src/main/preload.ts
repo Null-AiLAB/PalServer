@@ -17,6 +17,7 @@ const api: AppApi = {
   installOrUpdate: () => ipcRenderer.invoke('setup:installOrUpdate'),
   getInstallState: () => ipcRenderer.invoke('setup:getInstallState'),
   uninstallServer: () => ipcRenderer.invoke('setup:uninstall'),
+  deleteWorldData: () => ipcRenderer.invoke('server:deleteWorld'),
 
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (p) => ipcRenderer.invoke('config:set', p),
@@ -52,17 +53,6 @@ const api: AppApi = {
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   quitAndInstall: () => ipcRenderer.invoke('update:install'),
-
-  getModState: () => ipcRenderer.invoke('mods:state'),
-  setCurseforgeKey: (key) => ipcRenderer.invoke('mods:setKey', key),
-  searchMods: (query, serverOnly) => ipcRenderer.invoke('mods:search', query, serverOnly),
-  installMod: (id) => ipcRenderer.invoke('mods:install', id),
-  uninstallMod: (id) => ipcRenderer.invoke('mods:uninstall', id),
-  setModEnabled: (id, enabled) => ipcRenderer.invoke('mods:setEnabled', id, enabled),
-  installFramework: (which) => ipcRenderer.invoke('mods:framework', which),
-  readModConfig: (relPath) => ipcRenderer.invoke('mods:readConfig', relPath),
-  writeModConfig: (relPath, text) => ipcRenderer.invoke('mods:writeConfig', relPath, text),
-  exportClientPack: () => ipcRenderer.invoke('mods:exportClient'),
 
   onLog: (cb) => subscribe<LogLine>('server:log', cb),
   onStatus: (cb) => subscribe<ServerStatus>('server:status', cb),
