@@ -72,56 +72,6 @@ export interface UpdateStatus {
   message?: string; // error message
 }
 
-// ---- mods (CurseForge browser + installer) ----
-export type ModInstallType = 'pak' | 'logicmods' | 'ue4ss' | 'ue4ss-lua' | 'palschema' | 'unknown';
-
-/** A search result from the catalog (CurseForge). */
-export interface ModSearchItem {
-  id: number;
-  name: string;
-  summary: string;
-  author: string;
-  downloadCount: number;
-  dateModified: string;
-  logoUrl?: string;
-  websiteUrl?: string;
-  categories: string[];
-  gameVersions: string[];
-  latestFileId?: number;
-  latestFileName?: string;
-  /** best-effort: does the catalog hint this works on a dedicated server? */
-  serverHint: 'yes' | 'maybe' | 'client-only';
-}
-
-/** A mod we've installed on the server. */
-export interface InstalledMod {
-  id: number; // CurseForge mod id
-  packageName: string; // from Info.json; used in ActiveModList
-  name: string;
-  version: string;
-  installType: ModInstallType;
-  enabled: boolean;
-  isServer: boolean;
-  clientRequired: boolean;
-  files: string[]; // installed paths, relative to the server root
-  configFiles: string[]; // editable config paths, relative to the server root
-  installedAt: number;
-}
-
-export type ModFramework = 'ue4ss' | 'palschema';
-
-export interface ModManagerState {
-  hasApiKey: boolean;
-  frameworks: { ue4ss: boolean; palSchema: boolean };
-  installed: InstalledMod[];
-}
-
-export interface ModActionResult {
-  ok: boolean;
-  error?: string;
-  warning?: string;
-}
-
 // ---- scheduler ----
 export type ScheduleAction = 'start' | 'stop' | 'restart' | 'backup';
 
@@ -166,8 +116,6 @@ export interface AppSettings {
   playitAutoStart?: boolean;
   schedule?: ScheduleEntry[];
   setupComplete?: boolean;
-  curseforgeApiKey?: string;
-  installedMods?: InstalledMod[];
 }
 
 // ---- preload API surface (window.api) ----
@@ -181,6 +129,7 @@ export interface AppApi {
   installOrUpdate(): Promise<StartResult>;
   getInstallState(): Promise<InstallState>;
   uninstallServer(): Promise<StartResult>;
+  deleteWorldData(): Promise<StartResult>;
 
   getConfig(): Promise<PalOptions>;
   setConfig(patch: PalOptions): Promise<StartResult>;
@@ -216,18 +165,6 @@ export interface AppApi {
   checkForUpdates(): Promise<UpdateStatus>;
   downloadUpdate(): Promise<UpdateStatus>;
   quitAndInstall(): Promise<void>;
-
-  // mods
-  getModState(): Promise<ModManagerState>;
-  setCurseforgeKey(key: string): Promise<ModManagerState>;
-  searchMods(query: string, serverOnly: boolean): Promise<ModSearchItem[]>;
-  installMod(id: number): Promise<ModActionResult>;
-  uninstallMod(id: number): Promise<ModActionResult>;
-  setModEnabled(id: number, enabled: boolean): Promise<ModActionResult>;
-  installFramework(which: ModFramework): Promise<ModActionResult>;
-  readModConfig(relPath: string): Promise<string>;
-  writeModConfig(relPath: string, text: string): Promise<ModActionResult>;
-  exportClientPack(): Promise<ModActionResult>;
 
   onLog(cb: (l: LogLine) => void): () => void;
   onStatus(cb: (s: ServerStatus) => void): () => void;
