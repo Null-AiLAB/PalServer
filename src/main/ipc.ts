@@ -11,19 +11,6 @@ import { PalworldConfig, readRawConfig, writeRawConfig } from './palworld-config
 import { readSettings, writeSettings } from './settings';
 import { isInstalled, serverDir } from './paths';
 import { checkForUpdates, downloadUpdate, quitAndInstall } from './updater';
-import {
-  getState as getModState,
-  setApiKey as setModApiKey,
-  searchMods,
-  installMod,
-  uninstallMod,
-  setEnabled as setModEnabled,
-  installFramework,
-  readModConfig,
-  writeModConfig,
-  exportClientPack,
-} from './mod-manager';
-import type { ModFramework } from '../shared/types';
 import { rconCommand } from './rcon';
 import { sampleMetrics } from './metrics';
 import { listBackups, createBackup, restoreBackup, openBackupsFolder } from './backup-manager';
@@ -88,6 +75,7 @@ export function registerIpc(getWindow: GetWindow): void {
   ipcMain.handle('setup:installOrUpdate', () => serverManager.installOrUpdate());
   ipcMain.handle('setup:getInstallState', () => ({ installed: isInstalled() }));
   ipcMain.handle('setup:uninstall', () => serverManager.uninstall());
+  ipcMain.handle('server:deleteWorld', () => serverManager.deleteWorldData());
 
   // config (PalWorldSettings.ini)
   ipcMain.handle('config:get', () => PalworldConfig.load().toObject());
@@ -168,20 +156,4 @@ export function registerIpc(getWindow: GetWindow): void {
   ipcMain.handle('update:check', () => checkForUpdates());
   ipcMain.handle('update:download', () => downloadUpdate());
   ipcMain.handle('update:install', () => quitAndInstall());
-
-  // mods
-  ipcMain.handle('mods:state', () => getModState());
-  ipcMain.handle('mods:setKey', (_e, key: string) => setModApiKey(key));
-  ipcMain.handle('mods:search', (_e, query: string, serverOnly: boolean) => searchMods(query, serverOnly));
-  ipcMain.handle('mods:install', (_e, id: number) => installMod(id));
-  ipcMain.handle('mods:uninstall', (_e, id: number) => uninstallMod(id));
-  ipcMain.handle('mods:setEnabled', (_e, id: number, enabled: boolean) => setModEnabled(id, enabled));
-  ipcMain.handle('mods:framework', (_e, which: ModFramework) => installFramework(which));
-  ipcMain.handle('mods:readConfig', (_e, relPath: string) => readModConfig(relPath));
-  ipcMain.handle('mods:writeConfig', (_e, relPath: string, text: string) => writeModConfig(relPath, text));
-  ipcMain.handle('mods:exportClient', () => {
-    const res = exportClientPack();
-    if (res.ok && res.warning) void shell.showItemInFolder(res.warning);
-    return res;
-  });
 }
