@@ -65,3 +65,35 @@ export function ensureDirs(): void {
     fs.mkdirSync(d, { recursive: true });
   }
 }
+
+// ---- Mod system paths (official Palworld mod layout) ----
+// Ref: https://docs.palworldgame.com/settings-and-operation/mod/
+export function modsRootDir(): string {
+  return path.join(serverDir(), 'Mods');
+}
+/** Global mod settings ini (generated after first server launch). */
+export function modSettingsIni(): string {
+  return path.join(modsRootDir(), 'PalModSettings.ini');
+}
+export function ue4ssDir(): string {
+  return path.join(modsRootDir(), 'NativeMods', 'UE4SS');
+}
+/** UE4SS Lua mods live under here, one folder per PackageName. */
+export function ue4ssModsDir(): string {
+  return path.join(ue4ssDir(), 'Mods');
+}
+/** PalSchema JSON mods live under here, one folder per PackageName. */
+export function palSchemaModsDir(): string {
+  return path.join(ue4ssModsDir(), 'PalSchema', 'mods');
+}
+export function logicModsDir(): string {
+  return path.join(serverDir(), 'Pal', 'Content', 'Paks', 'LogicMods');
+}
+/** Plain .pak mods, one folder per PackageName. */
+export function workshopPaksDir(): string {
+  return path.join(serverDir(), 'Pal', 'Content', 'Paks', '~WorkshopMods');
+}
+/** Where our downloaded mod archives are cached before extraction. */
+export function modCacheDir(): string {
+  return path.join(dataDir(), 'mod-cache');
+}
