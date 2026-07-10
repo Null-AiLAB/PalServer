@@ -92,6 +92,7 @@ export default function App() {
   // manager (app) settings
   const [launchArgs, setLaunchArgs] = useState('');
   const [autoRestart, setAutoRestart] = useState(false);
+  const [perfFlags, setPerfFlags] = useState(true);
   const [rconPort, setRconPort] = useState(RCON_PORT_DEFAULT);
   const [managerMsg, setManagerMsg] = useState('');
 
@@ -106,6 +107,9 @@ export default function App() {
   const [worldConfirm, setWorldConfirm] = useState('');
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
+  // Buffer incoming log lines and flush on an interval so a chatty server
+  // doesn't trigger a React re-render (and smooth scroll) on every single line.
+  const logBufferRef = useRef<LogLine[]>([]);
 
   const refreshConfig = useCallback(async () => {
     const c = await api.getConfig();
@@ -129,6 +133,7 @@ export default function App() {
       setPlayitAuto(!!s.playitAutoStart);
       setLaunchArgs(s.launchArgs ?? '');
       setAutoRestart(!!s.autoRestart);
+      setPerfFlags(s.perfFlags !== false);
       setRconPort(s.rconPort ?? RCON_PORT_DEFAULT);
       setSecret(s.playitSecret ?? '');
     });
@@ -136,13 +141,22 @@ export default function App() {
     void refreshBackups();
     void api.getAppVersion().then(setAppVersion);
 
-    const offLog = api.onLog((l) => setLogs((prev) => [...prev.slice(-500), l]));
+    const offLog = api.onLog((l) => {
+      logBufferRef.current.push(l);
+    });
+    const flushId = setInterval(() => {
+      if (logBufferRef.current.length === 0) return;
+      const incoming = logBufferRef.current;
+      logBufferRef.current = [];
+      setLogs((prev) => [...prev, ...incoming].slice(-300));
+    }, 200);
     const offStatus = api.onStatus(setStatus);
     const offMetrics = api.onMetrics(setMetrics);
     const offPlayit = api.onPlayitStatus(setPlayit);
     const offUpdate = api.onUpdateStatus(setUpdate);
     return () => {
       offLog();
+      clearInterval(flushId);
       offStatus();
       offMetrics();
       offPlayit();
@@ -151,7 +165,7 @@ export default function App() {
   }, [refreshConfig, refreshBackups]);
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    logEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [logs]);
 
   // Poll the joined players while the server is running.
@@ -208,8 +222,8 @@ export default function App() {
 
   const saveManager = () =>
     withBusy(async () => {
-      await api.setSettings({ launchArgs, autoRestart, rconPort });
-      setManagerMsg('保存しました。');
+      await api.setSettings({ launchArgs, autoRestart, perfFlags, rconPort });
+      setManagerMsg('保存しました。次回の起動から反映されます。');
       setTimeout(() => setManagerMsg(''), 3000);
     });
 
@@ -803,6 +817,20 @@ export default function App() {
                     className="h-4 w-4 accent-sky-600"
                   />
                   クラッシュ時に自動で再起動する
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-neutral-300">
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={perfFlags}
+                      onChange={(e) => setPerfFlags(e.target.checked)}
+                      className="h-4 w-4 accent-sky-600"
+                    />
+                    パフォーマンス最適化フラグを付与する（推奨）
+                  </span>
+                  <span className="ml-6 text-xs text-neutral-500">
+                    -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS を起動時に自動付与します。
+                  </span>
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="text-neutral-400">RCON ポート</span>
