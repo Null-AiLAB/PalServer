@@ -108,6 +108,7 @@ export interface AppSettings {
   steamCmdDir?: string;
   launchArgs?: string;
   autoRestart?: boolean;
+  perfFlags?: boolean;
   rconEnabled?: boolean;
   rconPort?: number;
   adminPassword?: string;
