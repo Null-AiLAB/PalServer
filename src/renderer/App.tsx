@@ -168,20 +168,11 @@ export default function App() {
     logEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [logs]);
 
-  // Poll the joined players while the server is running.
+  // Clear the roster when the server isn't running. The list is fetched only
+  // on demand via the "更新" button — ShowPlayers goes over RCON and can be
+  // slow, so we never poll it on a timer.
   useEffect(() => {
-    if (status !== 'running') {
-      setPlayers([]);
-      return;
-    }
-    let alive = true;
-    const load = () => void api.showPlayers().then((p) => alive && setPlayers(p));
-    load();
-    const id = setInterval(load, 15000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+    if (status !== 'running') setPlayers([]);
   }, [status]);
 
   const installed = status !== 'not-installed';
@@ -553,7 +544,7 @@ export default function App() {
               <div className="flex-1 overflow-auto p-2 text-sm">
                 {players.length === 0 ? (
                   <div className="p-2 text-xs text-neutral-600">
-                    {status === 'running' ? 'プレイヤーはいません。' : '稼働中に表示されます。'}
+                    {status === 'running' ? '「更新」で参加者を取得します。' : '稼働中に「更新」で取得します。'}
                   </div>
                 ) : (
                   players.map((p, i) => (
