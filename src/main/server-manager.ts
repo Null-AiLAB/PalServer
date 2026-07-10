@@ -188,7 +188,14 @@ class ServerManager extends EventEmitter {
     const shippingExe = path.join(serverDir(), 'Pal', 'Binaries', 'Win64', 'PalServer-Win64-Shipping.exe');
     const exe = fs.existsSync(shippingExe) ? shippingExe : palServerExe();
     const cwd = serverDir();
-    const extra = (readSettings().launchArgs ?? '').split(' ').filter(Boolean);
+    const settings = readSettings();
+    const userArgs = (settings.launchArgs ?? '').split(' ').filter(Boolean);
+    // Standard recommended performance trio for dedicated servers.
+    const PERF_FLAGS = ['-useperfthreads', '-NoAsyncLoadingThread', '-UseMultithreadForDS'];
+    const extra =
+      settings.perfFlags === false
+        ? userArgs
+        : [...userArgs, ...PERF_FLAGS.filter((f) => !userArgs.some((a) => a.toLowerCase() === f.toLowerCase()))];
 
     this.intentionalStop = false;
     this.setStatus('starting');
