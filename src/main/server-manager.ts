@@ -40,6 +40,32 @@ function makeLog(text: string, source: LogSource): LogLine {
   return { id: ++logCounter, ts: Date.now(), level, source, text };
 }
 
+/**
+ * PalServer prints its startup banner ("Game version is v… / Running Palworld
+ * dedicated server on :PORT") as UTF-16, which reaches our UTF-8 stdout reader
+ * mis-decoded into CJK "mojibake". Detect that one line by its (un-garbled)
+ * ASCII tail and rebuild the original text: each mis-decoded code point is two
+ * little-endian bytes of the real ASCII. Everything else passes through
+ * untouched so legitimate non-ASCII (e.g. player names) is never mangled.
+ */
+function fixBannerMojibake(line: string): string {
+  if (!/Palworld dedicated server on/i.test(line)) return line;
+  // eslint-disable-next-line no-control-regex
+  if (!/[^\x00-\x7f]/.test(line)) return line; // pure ASCII: nothing to fix
+  const bytes: number[] = [];
+  for (const ch of line) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp <= 0x7f) bytes.push(cp);
+    else if (cp <= 0xffff) bytes.push(cp & 0xff, (cp >> 8) & 0xff);
+    else return line; // unexpected wide char: leave as-is
+  }
+  const rebuilt = Buffer.from(bytes).toString('utf8');
+  // Only accept a clean, printable reconstruction (allow tab/newline).
+  // eslint-disable-next-line no-control-regex
+  if (/[^\t\n\r\x20-\x7e]/.test(rebuilt)) return line;
+  return rebuilt;
+}
+
 class ServerManager extends EventEmitter {
   private child: ChildProcess | null = null;
   private status: ServerStatus = 'stopped';
@@ -64,6 +90,20 @@ class ServerManager extends EventEmitter {
   }
   private log(text: string, source: LogSource = 'system'): void {
     this.emit('log', makeLog(text, source));
+  }
+
+  /**
+   * Split a captured stdout/stderr chunk into lines, repairing the mis-encoded
+   * startup banner (which also hides an embedded newline), and emit each line.
+   */
+  private logServerChunk(chunk: string, source: LogSource): void {
+    for (const raw of chunk.split(/\r?\n/)) {
+      if (!raw) continue;
+      const fixed = fixBannerMojibake(raw);
+      for (const line of fixed.split(/\r?\n/)) {
+        if (line) this.log(line, source);
+      }
+    }
   }
 
   // ------------------------------------------------------------------
@@ -215,8 +255,8 @@ class ServerManager extends EventEmitter {
 
     this.child.stdout?.setEncoding('utf-8');
     this.child.stderr?.setEncoding('utf-8');
-    this.child.stdout?.on('data', (d: string) => d.split(/\r?\n/).forEach((l) => l && this.log(l, 'stdout')));
-    this.child.stderr?.on('data', (d: string) => d.split(/\r?\n/).forEach((l) => l && this.log(l, 'stderr')));
+    this.child.stdout?.on('data', (d: string) => this.logServerChunk(d, 'stdout'));
+    this.child.stderr?.on('data', (d: string) => this.logServerChunk(d, 'stderr'));
     this.child.on('error', (e) => {
       this.log(`プロセスエラー: ${e.message}`);
       this.setStatus('error');
