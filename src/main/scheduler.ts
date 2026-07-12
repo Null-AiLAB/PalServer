@@ -2,8 +2,8 @@
 // local time, and (optionally) announces the upcoming action in-game beforehand:
 //   - minute warnings:  "サーバーは5分後に自動で再起動されます。"
 //   - second countdown: "サーバー再起動まであと10秒" -> "9…" -> "8…" ...
-// Announcements are Broadcasts, so they only reach players while the server runs.
-// Adapted in spirit from bedrock-server-manager's scheduler (MIT, (c) 2026 yuzum).
+// Announcements go through the REST API, so they only reach players while the
+// server runs. Adapted in spirit from bedrock-server-manager (MIT, (c) 2026 yuzum).
 
 import type { ScheduleAction, ScheduleEntry } from '../shared/types';
 import { serverManager } from './server-manager';
@@ -30,9 +30,9 @@ function actionNoun(a: ScheduleAction): string {
 }
 
 function broadcast(text: string): void {
-  // Palworld's Broadcast breaks on spaces; JP text has none but stay safe.
-  const msg = text.trim().replace(/\s+/g, '_');
-  if (msg) void serverManager.sendCommand(`Broadcast ${msg}`);
+  // REST /announce accepts spaces and UTF-8 (Japanese) as-is — no substitution.
+  const msg = text.trim();
+  if (msg) void serverManager.announce(msg);
 }
 
 function runAction(action: ScheduleAction): void {
