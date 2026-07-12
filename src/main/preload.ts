@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { AppApi, LogLine, PlayitStatus, ServerStatus, SystemMetrics, UpdateStatus } from '../shared/types';
+import type { AppApi, LogLine, PlayerInfo, PlayitStatus, ServerStatus, SystemMetrics, UpdateStatus } from '../shared/types';
 
 function subscribe<T>(channel: string, cb: (p: T) => void): () => void {
   const l = (_e: IpcRendererEvent, p: T) => cb(p);
@@ -14,6 +14,8 @@ const api: AppApi = {
   restart: () => ipcRenderer.invoke('server:restart'),
   announce: (message) => ipcRenderer.invoke('server:announce', message),
   kickPlayer: (userId) => ipcRenderer.invoke('server:kick', userId),
+  banPlayer: (userId) => ipcRenderer.invoke('server:ban', userId),
+  unbanPlayer: (userId) => ipcRenderer.invoke('server:unban', userId),
   saveWorld: () => ipcRenderer.invoke('server:save'),
 
   installOrUpdate: () => ipcRenderer.invoke('setup:installOrUpdate'),
@@ -59,6 +61,7 @@ const api: AppApi = {
   onLog: (cb) => subscribe<LogLine>('server:log', cb),
   onStatus: (cb) => subscribe<ServerStatus>('server:status', cb),
   onMetrics: (cb) => subscribe<SystemMetrics>('system:metrics', cb),
+  onPlayers: (cb) => subscribe<PlayerInfo[]>('player:list', cb),
   onPlayitStatus: (cb) => subscribe<PlayitStatus>('playit:status', cb),
   onUpdateStatus: (cb) => subscribe<UpdateStatus>('update:status', cb),
 };
