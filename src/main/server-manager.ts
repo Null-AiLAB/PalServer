@@ -72,6 +72,7 @@ class ServerManager extends EventEmitter {
   private status: ServerStatus = 'stopped';
   private intentionalStop = false;
   private startedAt: number | null = null;
+  private playersRefreshTimer: NodeJS.Timeout | null = null;
 
   getStatus(): ServerStatus {
     if (!isInstalled() && this.status === 'stopped') return 'not-installed';
@@ -102,9 +103,31 @@ class ServerManager extends EventEmitter {
       if (!raw) continue;
       const fixed = fixBannerMojibake(raw);
       for (const line of fixed.split(/\r?\n/)) {
-        if (line) this.log(line, source);
+        if (!line) continue;
+        this.log(line, source);
+        this.maybeRefreshPlayers(line);
       }
     }
+  }
+
+  /**
+   * When a connection-related line appears in the server log, debounce a single
+   * roster refresh (emit 'players-changed'). This updates the player list only
+   * when someone actually joins/leaves — no timer polling.
+   */
+  private maybeRefreshPlayers(line: string): void {
+    if (
+      !/Join succeeded|Join request|AddPlayer|RemovePlayer|player.*(join|left|connect|disconnect)|UNetConnection.*Close|Close.*UNetConnection/i.test(
+        line,
+      )
+    ) {
+      return;
+    }
+    if (this.playersRefreshTimer) return; // a refresh is already scheduled
+    this.playersRefreshTimer = setTimeout(() => {
+      this.playersRefreshTimer = null;
+      this.emit('players-changed');
+    }, 1500);
   }
 
   // ------------------------------------------------------------------
@@ -392,6 +415,36 @@ class ServerManager extends EventEmitter {
     try {
       await rest.kick(id);
       this.log(`[kick] ${id}`, 'rcon');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  /** Ban a player by their REST userId (REST /ban). */
+  async banPlayer(userId: string): Promise<StartResult> {
+    const id = userId.trim();
+    if (!id) return { ok: false, error: 'ユーザーIDが空です。' };
+    const bad = this.restReady();
+    if (bad) return bad;
+    try {
+      await rest.ban(id);
+      this.log(`[ban] ${id}`, 'rcon');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  /** Lift a ban by REST userId (REST /unban). */
+  async unbanPlayer(userId: string): Promise<StartResult> {
+    const id = userId.trim();
+    if (!id) return { ok: false, error: 'ユーザーIDが空です。' };
+    const bad = this.restReady();
+    if (bad) return bad;
+    try {
+      await rest.unban(id);
+      this.log(`[unban] ${id}`, 'rcon');
       return { ok: true };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
