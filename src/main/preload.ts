@@ -12,7 +12,9 @@ const api: AppApi = {
   start: () => ipcRenderer.invoke('server:start'),
   stop: () => ipcRenderer.invoke('server:stop'),
   restart: () => ipcRenderer.invoke('server:restart'),
-  sendCommand: (c) => ipcRenderer.invoke('server:command', c),
+  announce: (message) => ipcRenderer.invoke('server:announce', message),
+  kickPlayer: (userId) => ipcRenderer.invoke('server:kick', userId),
+  saveWorld: () => ipcRenderer.invoke('server:save'),
 
   installOrUpdate: () => ipcRenderer.invoke('setup:installOrUpdate'),
   getInstallState: () => ipcRenderer.invoke('setup:getInstallState'),
