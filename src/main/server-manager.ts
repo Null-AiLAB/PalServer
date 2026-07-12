@@ -4,7 +4,8 @@
 // This replaces bedrock-server-manager's downloader.ts + server-manager.ts.
 // Key differences vs Bedrock:
 //   - Install: SteamCMD `app_update 2394010`, not a direct ZIP download.
-//   - Stop/commands: RCON, because PalServer does not read stdin commands.
+//   - Stop/commands: REST API, because PalServer does not read stdin commands
+//     (RCON was deprecated by Pocketpair in 1.0 and is being removed).
 //
 // Adapted from bedrock-server-manager (MIT, Copyright (c) 2026 yuzum).
 
@@ -29,7 +30,7 @@ import {
 } from './paths';
 import { readSettings } from './settings';
 import { PalworldConfig } from './palworld-config';
-import { rconCommand } from './rcon';
+import * as rest from './rest-api';
 
 const PALWORLD_APPID = '2394010';
 const STEAMCMD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
@@ -194,18 +195,18 @@ class ServerManager extends EventEmitter {
     }
   }
 
-  /** Make sure RCON is enabled in the config so we can control the server. */
-  private ensureRconConfig(): void {
+  /** Make sure the REST API is enabled in the config so we can control the server. */
+  private ensureRestConfig(): void {
     const s = readSettings();
-    if (!s.rconEnabled) return;
+    if (s.restApiEnabled === false) return;
     try {
       const cfg = PalworldConfig.load();
-      cfg.setBool('RCONEnabled', true);
-      cfg.setNumber('RCONPort', s.rconPort ?? 25575);
+      cfg.setBool('RESTAPIEnabled', true);
+      cfg.setNumber('RESTAPIPort', s.restApiPort ?? 8212);
       if (s.adminPassword) cfg.setString('AdminPassword', s.adminPassword);
       cfg.save();
     } catch (e) {
-      this.log(`RCON設定の適用に失敗: ${(e as Error).message}`);
+      this.log(`REST API 設定の適用に失敗: ${(e as Error).message}`);
     }
   }
 
@@ -220,7 +221,7 @@ class ServerManager extends EventEmitter {
       return { ok: false, error: msg };
     }
 
-    this.ensureRconConfig();
+    this.ensureRestConfig();
     // Launch the shipping executable directly when it exists. The PalServer.exe
     // launcher spawns the real server in a *new* console (CMD) window that our
     // flags can't suppress; running the shipping exe ourselves with
@@ -230,12 +231,16 @@ class ServerManager extends EventEmitter {
     const cwd = serverDir();
     const settings = readSettings();
     const userArgs = (settings.launchArgs ?? '').split(' ').filter(Boolean);
+    const has = (list: string[], flag: string) => list.some((a) => a.toLowerCase() === flag.toLowerCase());
+    const extra = [...userArgs];
     // Standard recommended performance trio for dedicated servers.
-    const PERF_FLAGS = ['-useperfthreads', '-NoAsyncLoadingThread', '-UseMultithreadForDS'];
-    const extra =
-      settings.perfFlags === false
-        ? userArgs
-        : [...userArgs, ...PERF_FLAGS.filter((f) => !userArgs.some((a) => a.toLowerCase() === f.toLowerCase()))];
+    if (settings.perfFlags !== false) {
+      for (const f of ['-useperfthreads', '-NoAsyncLoadingThread', '-UseMultithreadForDS']) {
+        if (!has(extra, f)) extra.push(f);
+      }
+    }
+    // List the server on the in-game community browser.
+    if (settings.publicLobby && !has(extra, '-publiclobby')) extra.push('-publiclobby');
 
     this.intentionalStop = false;
     this.setStatus('starting');
@@ -267,12 +272,12 @@ class ServerManager extends EventEmitter {
     return { ok: true };
   }
 
-  /** Poll RCON until the server answers, then mark it running. */
+  /** Poll the REST API until the server answers, then mark it running. */
   private waitUntilReady(): void {
     const s = readSettings();
     const deadline = Date.now() + 90_000;
-    // RCON disabled: no reliable readiness probe, so wait a few seconds.
-    if (!s.rconEnabled || !s.adminPassword) {
+    // No admin password: REST auth is impossible, so just wait a few seconds.
+    if (s.restApiEnabled === false || !s.adminPassword) {
       setTimeout(() => {
         if (this.child && this.status === 'starting') {
           this.startedAt = Date.now();
@@ -283,14 +288,11 @@ class ServerManager extends EventEmitter {
       return;
     }
 
-    // RCON enabled: poll Info until it answers, or fall back after the deadline.
+    // Poll /info until it answers, or fall back after the deadline.
     const tick = async () => {
       if (!this.child || this.status !== 'starting') return;
       try {
-        await rconCommand(
-          { port: s.rconPort ?? 25575, password: s.adminPassword!, timeoutMs: 2500 },
-          'Info',
-        );
+        await rest.info(2500);
         this.startedAt = Date.now();
         this.setStatus('running');
         this.log('サーバーが起動しました。');
@@ -302,7 +304,7 @@ class ServerManager extends EventEmitter {
         if (this.child) {
           this.startedAt = Date.now();
           this.setStatus('running');
-          this.log('サーバーが起動しました（RCON未確認）。');
+          this.log('サーバーが起動しました（REST未確認）。');
         }
         return;
       }
@@ -317,19 +319,18 @@ class ServerManager extends EventEmitter {
     this.setStatus('stopping');
     const s = readSettings();
 
-    if (s.rconEnabled && s.adminPassword) {
-      this.log('RCON経由で安全に停止します...');
+    if (s.restApiEnabled !== false && s.adminPassword) {
+      this.log('REST API 経由で安全に停止します...');
       try {
-        await rconCommand(
-          { port: s.rconPort ?? 25575, password: s.adminPassword },
-          'Save',
-        );
-        await rconCommand(
-          { port: s.rconPort ?? 25575, password: s.adminPassword },
-          'Shutdown 1 Server_is_shutting_down',
-        );
+        await rest.save();
+        await rest.shutdown(1, 'サーバーを停止します');
       } catch (e) {
-        this.log(`RCON停止に失敗、強制終了します: ${(e as Error).message}`);
+        this.log(`安全な停止に失敗、強制停止を試みます: ${(e as Error).message}`);
+        try {
+          await rest.forceStop();
+        } catch {
+          /* fall through to force-kill */
+        }
       }
     }
     // Force-kill safety net.
@@ -344,26 +345,66 @@ class ServerManager extends EventEmitter {
 
   async restart(): Promise<StartResult> {
     if (this.child) {
-      this.once('status', (s: ServerStatus) => {
-        if (s === 'stopped') setTimeout(() => this.start(), 1000);
-      });
+      // Wait for the *stopped* status. stop() emits 'stopping' first, so a
+      // one-shot listener would be consumed by that and never see 'stopped';
+      // use a persistent listener that removes itself once the server is down.
+      const onStatus = (st: ServerStatus) => {
+        if (st === 'stopped') {
+          this.off('status', onStatus);
+          setTimeout(() => this.start(), 1000);
+        }
+      };
+      this.on('status', onStatus);
       return this.stop();
     }
     return this.start();
   }
 
-  /** Send an arbitrary RCON command (e.g. ShowPlayers, Broadcast Hi). */
-  async sendCommand(command: string): Promise<StartResult> {
-    const cmd = command.trim();
-    if (!cmd) return { ok: false, error: '空のコマンドです。' };
+  private restReady(): StartResult | null {
     const s = readSettings();
-    if (!s.rconEnabled || !s.adminPassword) {
-      return { ok: false, error: 'RCONが無効です。設定でRCONとAdminPasswordを有効にしてください。' };
+    if (s.restApiEnabled === false || !s.adminPassword) {
+      return { ok: false, error: 'REST API が無効か AdminPassword が未設定です。設定を確認してください。' };
     }
+    return null;
+  }
+
+  /** Broadcast a message to everyone in-game (REST /announce). */
+  async announce(message: string): Promise<StartResult> {
+    const msg = message.trim();
+    if (!msg) return { ok: false, error: '空のメッセージです。' };
+    const bad = this.restReady();
+    if (bad) return bad;
     try {
-      const out = await rconCommand({ port: s.rconPort ?? 25575, password: s.adminPassword }, cmd);
-      this.log(`> ${cmd}`, 'rcon');
-      if (out.trim()) this.log(out.trim(), 'rcon');
+      await rest.announce(msg);
+      this.log(`[announce] ${msg}`, 'rcon');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  /** Kick a player by their REST userId (REST /kick). */
+  async kickPlayer(userId: string): Promise<StartResult> {
+    const id = userId.trim();
+    if (!id) return { ok: false, error: 'ユーザーIDが空です。' };
+    const bad = this.restReady();
+    if (bad) return bad;
+    try {
+      await rest.kick(id);
+      this.log(`[kick] ${id}`, 'rcon');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  /** Save the world now (REST /save). */
+  async saveWorld(): Promise<StartResult> {
+    const bad = this.restReady();
+    if (bad) return bad;
+    try {
+      await rest.save();
+      this.log('[save] ワールドを保存しました。', 'rcon');
       return { ok: true };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
