@@ -1,10 +1,8 @@
 // Japanese labels + UI control metadata for PalWorldSettings options.
 // Labels/behaviour are based on the official server guide (v0.7.2, game 0.7.3):
 // https://docs.palworldgame.com/ja/settings-and-operation/configuration/
-// Sliders are normalised so higher value = "more of the labelled quantity"
-// (no inverted "lower is faster" fields). Strict min/max are not officially
-// published (the wiki lists rate ranges as TBD); slider ranges mirror the
-// in-game world settings, and out-of-range values are still accepted.
+// Slider ranges mirror the in-game world settings where practical; values
+// outside a slider's range are still accepted (the slider auto-expands).
 
 import type { PalOptionValue } from '../shared/types';
 
@@ -23,12 +21,14 @@ export interface FieldMeta {
   password?: boolean;
 }
 
-export const GROUP_ORDER: Group[] = ['server', 'balance', 'feature', 'perf', 'other'];
+// Categories mirror the official 1.0.0 configuration page:
+//   Server management / Features / Game balances / Performances (+ その他).
+export const GROUP_ORDER: Group[] = ['server', 'feature', 'balance', 'perf', 'other'];
 export const GROUP_LABELS: Record<Group, string> = {
-  server: 'サーバー',
-  balance: 'ゲームバランス',
-  feature: 'ゲーム機能',
-  perf: 'パフォーマンス',
+  server: 'サーバー管理 (Server management)',
+  feature: '機能 (Features)',
+  balance: 'ゲームバランス (Game balances)',
+  perf: 'パフォーマンス (Performances)',
   other: 'その他・詳細（手入力）',
 };
 
@@ -54,11 +54,11 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     help: '空欄にすると誰でも参加できます。',
   },
   AdminPassword: {
-    label: '管理者パスワード (RCON)',
+    label: '管理者パスワード',
     group: 'server',
     control: 'text',
     password: true,
-    help: 'アプリからの停止・コマンド送信に必要です。例: Kx7-3pR9mq',
+    help: 'REST API 認証・アプリからの停止/操作に必要です。例: Kx7-3pR9mq',
   },
   ServerPlayerMaxNum: { label: '最大参加人数', group: 'server', control: 'slider', min: 1, max: 32, step: 1, help: 'ハード上限は 32。近づくほど負荷が増えます。' },
   PublicPort: { label: '公開ポート', group: 'server', control: 'number', help: '通常は 8211。' },
@@ -78,9 +78,15 @@ export const CONFIG_META: Record<string, FieldMeta> = {
   },
   AllowConnectPlatform: {
     label: '接続プラットフォーム（旧）',
-    group: 'other',
+    group: 'server',
     control: 'text',
     help: 'このバージョンでは使いません。CrossplayPlatforms を使用してください。',
+  },
+  bEnableBuildingPlayerUIdDisplay: {
+    label: '建材に設置者IDを表示',
+    group: 'server',
+    control: 'toggle',
+    help: '誰が建てたか可視化（管理・荒らし対策向け）。',
   },
   bIsShowJoinLeftMessage: { label: '参加/退出メッセージを表示', group: 'server', control: 'toggle' },
   ChatPostLimitPerMinute: { label: 'チャット投稿制限（1分あたり）', group: 'server', control: 'number' },
@@ -92,10 +98,20 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     help: 'ディスク負荷が増えますが、セーブの自動バックアップが作られます。',
   },
   LogFormatType: { label: 'ログ形式', group: 'server', control: 'select', options: ['Text', 'Json'] },
-  RCONEnabled: { label: 'RCON を有効化', group: 'server', control: 'toggle', help: 'アプリ制御に必要（保存時に自動でオン）。' },
-  RCONPort: { label: 'RCON ポート', group: 'server', control: 'number' },
-  RESTAPIEnabled: { label: 'REST API を有効化', group: 'server', control: 'toggle' },
-  RESTAPIPort: { label: 'REST API ポート', group: 'server', control: 'number' },
+  RESTAPIEnabled: {
+    label: 'REST API を有効化（アプリが使用）',
+    group: 'server',
+    control: 'toggle',
+    help: 'アプリの制御に使用します。保存時に自動でオンになります。',
+  },
+  RESTAPIPort: { label: 'REST API ポート', group: 'server', control: 'number', help: '既定 8212。' },
+  RCONEnabled: {
+    label: 'RCON を有効化（非推奨）',
+    group: 'server',
+    control: 'toggle',
+    help: '非推奨（廃止予定）。アプリは REST API を使用します。',
+  },
+  RCONPort: { label: 'RCON ポート（非推奨）', group: 'server', control: 'number' },
 
   // ---- ゲームバランス（倍率＝スライダー） ----
   ExpRate: { ...rate(0.1, 20, '経験値の入手倍率。ソロは高めが快適。'), label: '経験値倍率' },
@@ -141,16 +157,17 @@ export const CONFIG_META: Record<string, FieldMeta> = {
   GuildRejoinCooldownMinutes: { label: 'ギルド再加入クールタイム（分）', group: 'balance', control: 'number' },
   DenyTechnologyList: {
     label: '無効化するテクノロジー',
-    group: 'other',
+    group: 'balance',
     control: 'text',
     help: '習得を禁止するテクノロジーID。',
     example: '例: ("PALBOX","RepairBench")',
   },
+  MonsterFarmActionSpeedRate: { ...rate(0.1, 5, '牧場/放牧での生産速度。'), label: '牧場の生産速度倍率' },
   bAdditionalDropItemWhenPlayerKillingInPvPMode: { label: 'PvPキル時に専用アイテムをドロップ', group: 'balance', control: 'toggle' },
   AdditionalDropItemNumWhenPlayerKillingInPvPMode: { label: 'PvPキル時ドロップ数', group: 'balance', control: 'number' },
   AdditionalDropItemWhenPlayerKillingInPvPMode: {
     label: 'PvPキル時ドロップのアイテムID',
-    group: 'other',
+    group: 'balance',
     control: 'text',
     example: 'アイテムIDを指定',
   },
@@ -195,7 +212,10 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     options: ['None', 'Region', 'All'],
     help: 'None:しない / Region:地域ごと / All:完全ランダム',
   },
-  RandomizerSeed: { label: 'ランダム化シード', group: 'other', control: 'text', help: 'ランダム化時の再現用の値（空で無効）。' },
+  RandomizerSeed: { label: 'ランダム化シード', group: 'feature', control: 'text', help: 'ランダム化時の再現用の値（空で無効）。' },
+  bEnableVoiceChat: { label: 'ボイスチャットを有効化', group: 'feature', control: 'toggle', help: '1.0で追加。' },
+  VoiceChatMaxVolumeDistance: { label: 'ボイス最大音量の距離', group: 'feature', control: 'number', help: 'この距離までは減衰しません。' },
+  VoiceChatZeroVolumeDistance: { label: 'ボイス音量ゼロの距離', group: 'feature', control: 'number', help: 'この距離で音量が0になります。' },
 
   // 既定iniに存在するが公式表に無い一般的なトグル
   bEnablePlayerToPlayerDamage: { label: 'プレイヤー間ダメージ', group: 'feature', control: 'toggle' },
@@ -218,6 +238,12 @@ export const CONFIG_META: Record<string, FieldMeta> = {
     min: 5000,
     max: 15000,
     step: 500,
+  },
+  PhysicsActiveDropItemMaxNum: {
+    label: '物理挙動する落下アイテム上限',
+    group: 'perf',
+    control: 'number',
+    help: '1.0で追加。落下アイテムのラグ抑制に使えます。',
   },
 
   // 公式表・実機(v0.7.3)で確認できた追加キー
