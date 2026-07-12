@@ -136,6 +136,8 @@ export interface AppApi {
   restart(): Promise<StartResult>;
   announce(message: string): Promise<StartResult>;
   kickPlayer(userId: string): Promise<StartResult>;
+  banPlayer(userId: string): Promise<StartResult>;
+  unbanPlayer(userId: string): Promise<StartResult>;
   saveWorld(): Promise<StartResult>;
 
   installOrUpdate(): Promise<StartResult>;
@@ -181,6 +183,7 @@ export interface AppApi {
   onLog(cb: (l: LogLine) => void): () => void;
   onStatus(cb: (s: ServerStatus) => void): () => void;
   onMetrics(cb: (m: SystemMetrics) => void): () => void;
+  onPlayers(cb: (players: PlayerInfo[]) => void): () => void;
   onPlayitStatus(cb: (s: PlayitStatus) => void): () => void;
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
 }
