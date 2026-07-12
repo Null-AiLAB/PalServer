@@ -34,6 +34,7 @@ export interface PlayerInfo {
   name: string;
   playerId?: string;
   steamId?: string;
+  userId?: string; // REST API id used for kick/ban (e.g. "steam_0123...")
 }
 
 export interface BackupInfo {
@@ -45,9 +46,14 @@ export interface BackupInfo {
 
 export interface SystemMetrics {
   running: boolean;
-  cpu: number; // percent
-  memory: number; // bytes
+  cpu: number; // percent (host process, via pidusage)
+  memory: number; // bytes (host process)
   uptime: number; // ms since started
+  // Server-reported metrics (REST /metrics), present only while running.
+  serverFps?: number;
+  players?: number;
+  maxPlayers?: number;
+  days?: number;
 }
 
 export interface InstallState {
@@ -109,8 +115,11 @@ export interface AppSettings {
   launchArgs?: string;
   autoRestart?: boolean;
   perfFlags?: boolean;
-  rconEnabled?: boolean;
-  rconPort?: number;
+  publicLobby?: boolean; // append -publiclobby (list on the community browser)
+  restApiEnabled?: boolean;
+  restApiPort?: number;
+  rconEnabled?: boolean; // legacy (RCON deprecated); kept for older settings
+  rconPort?: number; // legacy
   adminPassword?: string;
   playitSecret?: string;
   playitTunnelAddress?: string;
@@ -125,7 +134,9 @@ export interface AppApi {
   start(): Promise<StartResult>;
   stop(): Promise<StartResult>;
   restart(): Promise<StartResult>;
-  sendCommand(command: string): Promise<StartResult>;
+  announce(message: string): Promise<StartResult>;
+  kickPlayer(userId: string): Promise<StartResult>;
+  saveWorld(): Promise<StartResult>;
 
   installOrUpdate(): Promise<StartResult>;
   getInstallState(): Promise<InstallState>;
