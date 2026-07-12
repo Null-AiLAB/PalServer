@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { LogLine, ServerStatus } from '../shared/types';
 
 const api = window.api;
-const RCON_PORT_DEFAULT = 25575;
+const REST_PORT_DEFAULT = 8212;
 
 export default function SetupWizard({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0);
@@ -44,10 +44,10 @@ export default function SetupWizard({ onDone }: { onDone: () => void }) {
         ServerName: serverName,
         ServerPassword: password,
         AdminPassword: adminPassword,
-        RCONEnabled: true,
-        RCONPort: RCON_PORT_DEFAULT,
+        RESTAPIEnabled: true,
+        RESTAPIPort: REST_PORT_DEFAULT,
       });
-      await api.setSettings({ rconEnabled: true, rconPort: RCON_PORT_DEFAULT, adminPassword });
+      await api.setSettings({ restApiEnabled: true, restApiPort: REST_PORT_DEFAULT, adminPassword });
     } finally {
       setBusy(false);
     }
@@ -100,7 +100,7 @@ export default function SetupWizard({ onDone }: { onDone: () => void }) {
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-neutral-400">管理者パスワード（RCON制御に必要・推奨）</span>
+              <span className="text-neutral-400">管理者パスワード（アプリの制御に必要・推奨）</span>
               <input
                 type="password"
                 value={adminPassword}
