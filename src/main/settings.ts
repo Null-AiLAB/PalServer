@@ -8,8 +8,9 @@ import type { AppSettings } from '../shared/types';
 
 const DEFAULTS: AppSettings = {
   autoRestart: false,
-  rconEnabled: true,
-  rconPort: 25575,
+  perfFlags: true,
+  restApiEnabled: true,
+  restApiPort: 8212,
 };
 
 function file(): string {
