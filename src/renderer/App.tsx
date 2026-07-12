@@ -51,7 +51,7 @@ const STATUS_COLOR: Record<ServerStatus, string> = {
   error: 'bg-red-500',
 };
 
-const RCON_PORT_DEFAULT = 25575;
+const REST_PORT_DEFAULT = 8212;
 
 function bytes(n: number): string {
   if (n <= 0) return '0 MB';
@@ -84,7 +84,6 @@ export default function App() {
 
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
-  const [command, setCommand] = useState('');
   const [broadcast, setBroadcast] = useState('');
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [showWizard, setShowWizard] = useState(false);
@@ -93,8 +92,12 @@ export default function App() {
   const [launchArgs, setLaunchArgs] = useState('');
   const [autoRestart, setAutoRestart] = useState(false);
   const [perfFlags, setPerfFlags] = useState(true);
-  const [rconPort, setRconPort] = useState(RCON_PORT_DEFAULT);
+  const [publicLobby, setPublicLobby] = useState(false);
+  const [restApiPort, setRestApiPort] = useState(REST_PORT_DEFAULT);
   const [managerMsg, setManagerMsg] = useState('');
+
+  // server-config accordion: which groups are expanded
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // in-app update
   const [appVersion, setAppVersion] = useState('');
@@ -134,7 +137,8 @@ export default function App() {
       setLaunchArgs(s.launchArgs ?? '');
       setAutoRestart(!!s.autoRestart);
       setPerfFlags(s.perfFlags !== false);
-      setRconPort(s.rconPort ?? RCON_PORT_DEFAULT);
+      setPublicLobby(!!s.publicLobby);
+      setRestApiPort(s.restApiPort ?? REST_PORT_DEFAULT);
       setSecret(s.playitSecret ?? '');
     });
     void refreshConfig();
@@ -169,8 +173,7 @@ export default function App() {
   }, [logs]);
 
   // Clear the roster when the server isn't running. The list is fetched only
-  // on demand via the "更新" button — ShowPlayers goes over RCON and can be
-  // slow, so we never poll it on a timer.
+  // on demand via the "更新" button (REST /players), never polled on a timer.
   useEffect(() => {
     if (status !== 'running') setPlayers([]);
   }, [status]);
@@ -196,24 +199,24 @@ export default function App() {
       for (const [k, v] of Object.entries(draft)) {
         if (originalRef.current[k] !== v) patch[k] = v;
       }
-      patch['RCONEnabled'] = true;
-      patch['RCONPort'] = rconPort;
+      patch['RESTAPIEnabled'] = true;
+      patch['RESTAPIPort'] = restApiPort;
       await api.setConfig(patch);
       if ('AdminPassword' in draft) {
         await api.setSettings({
-          rconEnabled: true,
-          rconPort,
+          restApiEnabled: true,
+          restApiPort,
           adminPassword: String(draft['AdminPassword'] ?? ''),
         });
       }
-      originalRef.current = { ...draft, RCONEnabled: true, RCONPort: rconPort };
+      originalRef.current = { ...draft, RESTAPIEnabled: true, RESTAPIPort: restApiPort };
       setSavedMsg('保存しました。次回の起動から反映されます。');
       setTimeout(() => setSavedMsg(''), 4000);
     });
 
   const saveManager = () =>
     withBusy(async () => {
-      await api.setSettings({ launchArgs, autoRestart, perfFlags, rconPort });
+      await api.setSettings({ launchArgs, autoRestart, perfFlags, publicLobby, restApiPort });
       setManagerMsg('保存しました。次回の起動から反映されます。');
       setTimeout(() => setManagerMsg(''), 3000);
     });
@@ -456,6 +459,13 @@ export default function App() {
         </div>
 
         <div className="ml-auto flex items-center gap-4 text-xs text-neutral-400">
+          {metrics.serverFps != null && <span>FPS {metrics.serverFps}</span>}
+          {metrics.players != null && (
+            <span>
+              人数 {metrics.players}
+              {metrics.maxPlayers != null ? `/${metrics.maxPlayers}` : ''}
+            </span>
+          )}
           <span>CPU {metrics.cpu}%</span>
           <span>MEM {bytes(metrics.memory)}</span>
           <span>稼働 {uptime(metrics.uptime)}</span>
@@ -548,13 +558,13 @@ export default function App() {
                   </div>
                 ) : (
                   players.map((p, i) => (
-                    <div key={`${p.steamId ?? p.name}-${i}`} className="group rounded px-2 py-1.5 hover:bg-neutral-900">
+                    <div key={`${p.userId ?? p.steamId ?? p.name}-${i}`} className="group rounded px-2 py-1.5 hover:bg-neutral-900">
                       <div className="truncate text-neutral-100">{p.name}</div>
                       <div className="flex items-center gap-1">
-                        <span className="truncate font-mono text-xs text-neutral-500">{p.steamId ?? '-'}</span>
-                        {p.steamId && (
+                        <span className="truncate font-mono text-xs text-neutral-500">{p.userId ?? p.steamId ?? '-'}</span>
+                        {p.userId && (
                           <button
-                            onClick={() => void api.sendCommand(`KickPlayer ${p.steamId}`)}
+                            onClick={() => p.userId && void api.kickPlayer(p.userId)}
                             className="ml-auto hidden rounded bg-neutral-800 px-2 text-xs hover:bg-red-600 group-hover:block"
                           >
                             Kick
@@ -572,7 +582,7 @@ export default function App() {
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <button
                   disabled={!canStop}
-                  onClick={() => void api.sendCommand('Save')}
+                  onClick={() => void api.saveWorld()}
                   className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-40"
                 >
                   セーブ
@@ -616,16 +626,16 @@ export default function App() {
                   className="flex gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    const msg = broadcast.trim().replace(/\s+/g, '_');
+                    const msg = broadcast.trim();
                     if (!msg) return;
-                    void api.sendCommand(`Broadcast ${msg}`);
+                    void api.announce(msg);
                     setBroadcast('');
                   }}
                 >
                   <input
                     value={broadcast}
                     onChange={(e) => setBroadcast(e.target.value)}
-                    placeholder="メッセージを入力（Palworldの仕様で空白は _ に置換されます）"
+                    placeholder="メッセージを入力（日本語・スペースもそのまま送れます）"
                     className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm ring-1 ring-neutral-800 focus:ring-sky-600"
                   />
                   <button
@@ -636,24 +646,6 @@ export default function App() {
                   </button>
                 </form>
               </div>
-
-              <form
-                className="mt-3 flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!command.trim()) return;
-                  void api.sendCommand(command);
-                  setCommand('');
-                }}
-              >
-                <input
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  placeholder="RCONコマンド (例: Info / ShowPlayers)"
-                  className="flex-1 rounded bg-neutral-900 px-3 py-2 text-sm outline-none ring-1 ring-neutral-800 focus:ring-sky-600"
-                />
-                <button className="rounded bg-sky-600 px-4 py-2 text-sm hover:bg-sky-500">送信</button>
-              </form>
             </div>
           </div>
         )}
@@ -677,19 +669,33 @@ export default function App() {
                 設定項目がありません。先にサーバーをインストールしてください。
               </p>
             ) : (
-              <div className="space-y-6">
-                {GROUP_ORDER.map((g) =>
-                  groupedKeys[g].length === 0 ? null : (
-                    <section key={g}>
-                      <h3 className="mb-2 border-b border-neutral-800 pb-1 text-sm font-medium text-neutral-300">
-                        {GROUP_LABELS[g]}
-                      </h3>
-                      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-                        {groupedKeys[g].map((key) => renderField(key))}
-                      </div>
+              <div className="space-y-3">
+                {GROUP_ORDER.map((g) => {
+                  const keys = groupedKeys[g];
+                  if (keys.length === 0) return null;
+                  // Auto-expand while searching; otherwise honor the toggle.
+                  const expanded = filter.trim() !== '' || !!openGroups[g];
+                  return (
+                    <section key={g} className="overflow-hidden rounded border border-neutral-800">
+                      <button
+                        type="button"
+                        onClick={() => setOpenGroups((o) => ({ ...o, [g]: !o[g] }))}
+                        className="flex w-full items-center gap-2 bg-neutral-900/60 px-3 py-2 text-left text-sm font-medium text-neutral-200 hover:bg-neutral-900"
+                      >
+                        <span className={`text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
+                        <span>{GROUP_LABELS[g]}</span>
+                        <span className="ml-auto rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-400">
+                          {keys.length}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div className="grid grid-cols-1 gap-2 p-3 lg:grid-cols-2">
+                          {keys.map((key) => renderField(key))}
+                        </div>
+                      )}
                     </section>
-                  ),
-                )}
+                  );
+                })}
               </div>
             )}
 
@@ -823,14 +829,31 @@ export default function App() {
                     -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS を起動時に自動付与します。
                   </span>
                 </label>
+                <label className="flex flex-col gap-1 text-sm text-neutral-300">
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={publicLobby}
+                      onChange={(e) => setPublicLobby(e.target.checked)}
+                      className="h-4 w-4 accent-sky-600"
+                    />
+                    コミュニティ一覧に載せる（-publiclobby）
+                  </span>
+                  <span className="ml-6 text-xs text-neutral-500">
+                    ゲーム内のコミュニティサーバー一覧に表示されます。
+                  </span>
+                </label>
                 <label className="flex flex-col gap-1 text-sm">
-                  <span className="text-neutral-400">RCON ポート</span>
+                  <span className="text-neutral-400">REST API ポート</span>
                   <input
                     type="number"
-                    value={rconPort}
-                    onChange={(e) => setRconPort(Number(e.target.value))}
+                    value={restApiPort}
+                    onChange={(e) => setRestApiPort(Number(e.target.value))}
                     className="w-40 rounded bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:ring-sky-600"
                   />
+                  <span className="text-xs text-neutral-500">
+                    既定 8212。アプリはこのポートでサーバーを制御します（RCONは非推奨のため不使用）。
+                  </span>
                 </label>
                 <div className="flex items-center gap-3">
                   <button
