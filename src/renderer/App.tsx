@@ -156,6 +156,7 @@ export default function App() {
     }, 200);
     const offStatus = api.onStatus(setStatus);
     const offMetrics = api.onMetrics(setMetrics);
+    const offPlayers = api.onPlayers(setPlayers);
     const offPlayit = api.onPlayitStatus(setPlayit);
     const offUpdate = api.onUpdateStatus(setUpdate);
     return () => {
@@ -163,6 +164,7 @@ export default function App() {
       clearInterval(flushId);
       offStatus();
       offMetrics();
+      offPlayers();
       offPlayit();
       offUpdate();
     };
@@ -172,8 +174,8 @@ export default function App() {
     logEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [logs]);
 
-  // Clear the roster when the server isn't running. The list is fetched only
-  // on demand via the "更新" button (REST /players), never polled on a timer.
+  // Roster updates arrive via api.onPlayers (pushed from main on join/leave
+  // detection or the 更新 button). Clear it locally when the server isn't up.
   useEffect(() => {
     if (status !== 'running') setPlayers([]);
   }, [status]);
@@ -554,7 +556,7 @@ export default function App() {
               <div className="flex-1 overflow-auto p-2 text-sm">
                 {players.length === 0 ? (
                   <div className="p-2 text-xs text-neutral-600">
-                    {status === 'running' ? '「更新」で参加者を取得します。' : '稼働中に「更新」で取得します。'}
+                    {status === 'running' ? '参加者はいません（参加時に自動更新されます）。' : '稼働中に自動更新されます。'}
                   </div>
                 ) : (
                   players.map((p, i) => (
@@ -563,12 +565,24 @@ export default function App() {
                       <div className="flex items-center gap-1">
                         <span className="truncate font-mono text-xs text-neutral-500">{p.userId ?? p.steamId ?? '-'}</span>
                         {p.userId && (
-                          <button
-                            onClick={() => p.userId && void api.kickPlayer(p.userId)}
-                            className="ml-auto hidden rounded bg-neutral-800 px-2 text-xs hover:bg-red-600 group-hover:block"
-                          >
-                            Kick
-                          </button>
+                          <span className="ml-auto hidden shrink-0 gap-1 group-hover:flex">
+                            <button
+                              onClick={() => p.userId && void api.kickPlayer(p.userId)}
+                              className="rounded bg-neutral-800 px-2 text-xs hover:bg-amber-600"
+                            >
+                              Kick
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (p.userId && window.confirm(`${p.name} を BAN しますか？（再参加できなくなります）`)) {
+                                  void api.banPlayer(p.userId);
+                                }
+                              }}
+                              className="rounded bg-neutral-800 px-2 text-xs hover:bg-red-600"
+                            >
+                              Ban
+                            </button>
+                          </span>
                         )}
                       </div>
                     </div>
