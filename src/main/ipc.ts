@@ -4,14 +4,14 @@
 import { ipcMain, shell, app, type BrowserWindow } from 'electron';
 import os from 'node:os';
 import fs from 'node:fs';
-import type { AppSettings, PalOptions, PlayerInfo } from '../shared/types';
+import type { AppSettings, PalOptions } from '../shared/types';
 import { serverManager } from './server-manager';
 import { playitManager } from './playit-manager';
 import { PalworldConfig, readRawConfig, writeRawConfig } from './palworld-config';
 import { readSettings, writeSettings } from './settings';
 import { isInstalled, serverDir } from './paths';
 import { checkForUpdates, downloadUpdate, quitAndInstall } from './updater';
-import { rconCommand } from './rcon';
+import * as rest from './rest-api';
 import { sampleMetrics } from './metrics';
 import { listBackups, createBackup, restoreBackup, openBackupsFolder } from './backup-manager';
 import { getSchedule, setSchedule } from './scheduler';
@@ -28,17 +28,6 @@ function lanAddress(): string {
     }
   }
   return '127.0.0.1';
-}
-
-/** Palworld's ShowPlayers returns CSV lines: name,playeruid,steamid (with header). */
-function parsePlayers(raw: string): PlayerInfo[] {
-  const out: PlayerInfo[] = [];
-  for (const line of raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
-    if (/^name\s*,/i.test(line)) continue;
-    const [name, playerId, steamId] = line.split(',');
-    if (name) out.push({ name, playerId, steamId });
-  }
-  return out;
 }
 
 export function registerIpc(getWindow: GetWindow): void {
@@ -61,7 +50,26 @@ export function registerIpc(getWindow: GetWindow): void {
   playitManager.on('status', (s) => send('playit:status', s));
 
   setInterval(() => {
-    void sampleMetrics().then((m) => send('system:metrics', m));
+    void sampleMetrics().then(async (m) => {
+      // While running, enrich with server-reported metrics (fps/players/etc).
+      const s = readSettings();
+      if (serverManager.getStatus() === 'running' && s.restApiEnabled !== false && s.adminPassword) {
+        try {
+          const rm = await rest.metrics();
+          send('system:metrics', {
+            ...m,
+            serverFps: rm.serverfps,
+            players: rm.currentplayernum,
+            maxPlayers: rm.maxplayernum,
+            days: rm.days,
+          });
+          return;
+        } catch {
+          /* fall back to host metrics only */
+        }
+      }
+      send('system:metrics', m);
+    });
   }, 2000);
 
   // lifecycle
@@ -69,7 +77,9 @@ export function registerIpc(getWindow: GetWindow): void {
   ipcMain.handle('server:start', () => serverManager.start());
   ipcMain.handle('server:stop', () => serverManager.stop());
   ipcMain.handle('server:restart', () => serverManager.restart());
-  ipcMain.handle('server:command', (_e, command: string) => serverManager.sendCommand(command));
+  ipcMain.handle('server:announce', (_e, message: string) => serverManager.announce(message));
+  ipcMain.handle('server:kick', (_e, userId: string) => serverManager.kickPlayer(userId));
+  ipcMain.handle('server:save', () => serverManager.saveWorld());
 
   // install / update
   ipcMain.handle('setup:installOrUpdate', () => serverManager.installOrUpdate());
@@ -111,16 +121,12 @@ export function registerIpc(getWindow: GetWindow): void {
   ipcMain.handle('backup:restore', (_e, id: string) => restoreBackup(id));
   ipcMain.handle('backup:openFolder', () => openBackupsFolder());
 
-  // players via RCON
+  // players via REST API
   ipcMain.handle('player:show', async () => {
     const s = readSettings();
-    if (!s.rconEnabled || !s.adminPassword) return [];
+    if (s.restApiEnabled === false || !s.adminPassword) return [];
     try {
-      const out = await rconCommand(
-        { port: s.rconPort ?? 25575, password: s.adminPassword },
-        'ShowPlayers',
-      );
-      return parsePlayers(out);
+      return await rest.players();
     } catch {
       return [];
     }
