@@ -107,6 +107,16 @@ export async function kick(userid: string, message = 'Kicked by admin.'): Promis
   await request('POST', '/kick', { userid, message });
 }
 
+/** POST /ban — ban a player by userId. */
+export async function ban(userid: string, message = 'Banned by admin.'): Promise<void> {
+  await request('POST', '/ban', { userid, message });
+}
+
+/** POST /unban — lift a ban by userId. */
+export async function unban(userid: string): Promise<void> {
+  await request('POST', '/unban', { userid });
+}
+
 /** POST /save — persist the world. */
 export async function save(): Promise<void> {
   await request('POST', '/save', {});
