@@ -35,6 +35,19 @@ export function registerIpc(getWindow: GetWindow): void {
     getWindow()?.webContents.send(channel, payload);
   };
 
+  // Push an updated roster to the renderer (best effort).
+  const pushPlayers = () => {
+    const s = readSettings();
+    if (s.restApiEnabled === false || !s.adminPassword) return;
+    if (serverManager.getStatus() !== 'running') return;
+    rest
+      .players()
+      .then((list) => send('player:list', list))
+      .catch(() => {
+        /* ignore */
+      });
+  };
+
   serverManager.on('log', (l) => {
     send('server:log', l);
     appendLog(l);
@@ -46,29 +59,57 @@ export function registerIpc(getWindow: GetWindow): void {
       if (s === 'starting') void playitManager.enable();
       else if (s === 'stopped' || s === 'not-installed' || s === 'error') playitManager.disable();
     }
+    // Roster: fetch once shortly after the server is up; clear it when it stops.
+    if (s === 'running') {
+      setTimeout(pushPlayers, 5000);
+    } else if (s === 'stopped' || s === 'not-installed' || s === 'error') {
+      send('player:list', []);
+    }
   });
+  // Refresh the roster only when a join/leave was detected in the server log.
+  serverManager.on('players-changed', pushPlayers);
   playitManager.on('status', (s) => send('playit:status', s));
 
+  // Server-reported metrics (fps/players/etc) are fetched in the background and
+  // cached, so the 2s metrics tick never waits on a REST round-trip (keeps the
+  // UI light and avoids header flicker).
+  let restMetricsBusy = false;
+  let lastServerMetrics: {
+    serverFps?: number;
+    players?: number;
+    maxPlayers?: number;
+    days?: number;
+  } = {};
+
   setInterval(() => {
-    void sampleMetrics().then(async (m) => {
-      // While running, enrich with server-reported metrics (fps/players/etc).
-      const s = readSettings();
-      if (serverManager.getStatus() === 'running' && s.restApiEnabled !== false && s.adminPassword) {
-        try {
-          const rm = await rest.metrics();
-          send('system:metrics', {
-            ...m,
-            serverFps: rm.serverfps,
-            players: rm.currentplayernum,
-            maxPlayers: rm.maxplayernum,
-            days: rm.days,
-          });
-          return;
-        } catch {
-          /* fall back to host metrics only */
-        }
+    void sampleMetrics().then((m) => {
+      const running = serverManager.getStatus() === 'running';
+      if (!running) {
+        lastServerMetrics = {};
+        send('system:metrics', m);
+        return;
       }
-      send('system:metrics', m);
+      const s = readSettings();
+      if (s.restApiEnabled !== false && s.adminPassword && !restMetricsBusy) {
+        restMetricsBusy = true;
+        rest
+          .metrics()
+          .then((rm) => {
+            lastServerMetrics = {
+              serverFps: rm.serverfps,
+              players: rm.currentplayernum,
+              maxPlayers: rm.maxplayernum,
+              days: rm.days,
+            };
+          })
+          .catch(() => {
+            /* keep last known values */
+          })
+          .finally(() => {
+            restMetricsBusy = false;
+          });
+      }
+      send('system:metrics', { ...m, ...lastServerMetrics });
     });
   }, 2000);
 
@@ -79,6 +120,8 @@ export function registerIpc(getWindow: GetWindow): void {
   ipcMain.handle('server:restart', () => serverManager.restart());
   ipcMain.handle('server:announce', (_e, message: string) => serverManager.announce(message));
   ipcMain.handle('server:kick', (_e, userId: string) => serverManager.kickPlayer(userId));
+  ipcMain.handle('server:ban', (_e, userId: string) => serverManager.banPlayer(userId));
+  ipcMain.handle('server:unban', (_e, userId: string) => serverManager.unbanPlayer(userId));
   ipcMain.handle('server:save', () => serverManager.saveWorld());
 
   // install / update
