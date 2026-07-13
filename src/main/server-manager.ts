@@ -67,6 +67,17 @@ function fixBannerMojibake(line: string): string {
   return rebuilt;
 }
 
+/**
+ * PalServer logs a line for every REST request it serves (e.g. "REST accessed
+ * endpoint /v1/api/metrics OK"). The app itself polls /metrics every 2s and
+ * probes /info while starting, so those lines flood the console with no value.
+ * Filter out just those two background-probe endpoints; user-initiated calls
+ * (announce/kick/ban/save/shutdown/players) still show as confirmation.
+ */
+function isRestPollingNoise(line: string): boolean {
+  return /REST accessed endpoint \/v1\/api\/(metrics|info)\b/i.test(line);
+}
+
 class ServerManager extends EventEmitter {
   private child: ChildProcess | null = null;
   private status: ServerStatus = 'stopped';
@@ -104,6 +115,7 @@ class ServerManager extends EventEmitter {
       const fixed = fixBannerMojibake(raw);
       for (const line of fixed.split(/\r?\n/)) {
         if (!line) continue;
+        if (isRestPollingNoise(line)) continue; // drop our own /metrics,/info probe spam
         this.log(line, source);
         this.maybeRefreshPlayers(line);
       }
